@@ -11,7 +11,7 @@ const TT_BONUS: i32 = 1_000_000;
 const CAPTURE_BONUS: i32 = 100_000;
 
 pub fn ordermoves(
-    moves: &mut Vec<Move>,
+    moves: &mut [Move],
     side_to_move: Color,
     tt_best_move: Option<Move>,
     pv_best_move: Option<Move>,

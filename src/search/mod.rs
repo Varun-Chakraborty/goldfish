@@ -22,7 +22,7 @@ use crate::{
             EngineEvent, EngineLimits, IterationInfo, PVTable, Score, SearchContext, SearchStats,
         },
     },
-    transposition::{TTStats, TranspositionTable},
+    transposition::TranspositionTable,
 };
 
 const MATE: i32 = 32000;
@@ -42,7 +42,7 @@ pub fn iterative_deepening<F>(
     let depth = limits.depth.unwrap_or(256);
 
     let tt = tt.get_or_insert_with(|| TranspositionTable::new_table(64, MATE - MAX_PLY));
-    let history_heuristics = history.get_or_insert_with(|| HistoryHeuristic::new());
+    let history_heuristics = history.get_or_insert_with(HistoryHeuristic::new);
     let mut pv_table = PVTable::new();
     let mut pv = None;
     let mut nodes_in_last_iteration = 0;
@@ -85,7 +85,7 @@ pub fn iterative_deepening<F>(
             .ceil() as u64,
             best_line: pv.clone(),
             search_stats: Some(SearchStats {
-                tt_stats: mem::replace(tt_stats, TTStats::default()),
+                tt_stats: mem::take(tt_stats),
                 branching_factor: (search_context.search_stats.search_counters.nodes as f64)
                     .powf(1f64 / depth as f64),
                 delta: search_context.search_stats.search_counters.nodes as i64

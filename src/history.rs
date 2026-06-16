@@ -12,11 +12,10 @@ impl HistoryHeuristic {
     }
 
     pub fn reward(&mut self, side_to_move: Color, m: &Move, depth: u16) {
-        self.history[side_to_move as usize][m.from.idx() as usize][m.to.idx() as usize] +=
-            depth * depth;
+        self.history[side_to_move as usize][m.from.idx()][m.to.idx()] += depth * depth;
     }
 
     pub fn score(&self, side_to_move: Color, m: &Move) -> u16 {
-        self.history[side_to_move as usize][m.from.idx() as usize][m.to.idx() as usize]
+        self.history[side_to_move as usize][m.from.idx()][m.to.idx()]
     }
 }

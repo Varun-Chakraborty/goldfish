@@ -291,7 +291,7 @@ mod tests {
     fn test_disambiguation() {
         // Two white rooks that can both go to d5: one on d1, one on a5
         // Position: K on e1, rooks on d1 and a5, black K on e8
-        let mut gs = GameState::from_fen("4k3/8/8/R2b4/8/8/8/3RK3 w - - 0 1").unwrap();
+        let gs = GameState::from_fen("4k3/8/8/R2b4/8/8/8/3RK3 w - - 0 1").unwrap();
         let m = Move {
             from: Coordinate::new_coordinate(3, 0),
             to: Coordinate::new_coordinate(3, 4),
@@ -301,7 +301,7 @@ mod tests {
             piece: PieceType::Rook,
             castle: None,
         };
-        let m = &fmt_pgn_moves(&mut gs, &[m])[0];
+        let m = &fmt_pgn_moves(&gs, &[m])[0];
         assert_eq!(m, "Rdxd5");
     }
 
