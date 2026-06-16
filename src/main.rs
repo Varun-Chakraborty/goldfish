@@ -79,10 +79,9 @@ fn main() {
                                     }) {
                                         println!("{e}");
                                     }
-                                } else if let Err(e) = cmd_sender.send(EngineCommand::Init {
-                                    fen,
-                                    moves: None,
-                                }) {
+                                } else if let Err(e) =
+                                    cmd_sender.send(EngineCommand::Init { fen, moves: None })
+                                {
                                     println!("{e}");
                                 }
                             }
@@ -133,7 +132,9 @@ fn main() {
                             .join(" ")
                     ),
                     EngineEvent::SearchFinished(m) | EngineEvent::SearchStopped(m) => {
-                        println!("bestmove {}", m.to_algebraic())
+                        if let Some(m) = m {
+                            println!("bestmove {}", m.to_algebraic())
+                        }
                     }
                 },
             },

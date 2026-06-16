@@ -68,7 +68,12 @@ impl Position {
         }
 
         position.legal_moves = Some(gs.legal_moves(All));
-        position.status = match position.legal_moves.as_ref().expect("legal_moves set above").is_empty() {
+        position.status = match position
+            .legal_moves
+            .as_ref()
+            .expect("legal_moves set above")
+            .is_empty()
+        {
             true => match gs.in_check(gs.turn) {
                 true => PositionStatus::Checkmate,
                 false => PositionStatus::Draw(DrawReason::Stalemate),

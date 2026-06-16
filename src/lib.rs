@@ -1,6 +1,7 @@
 mod board;
 mod eval;
 mod game;
+mod history;
 mod notation;
 mod perft;
 mod position;
@@ -13,15 +14,14 @@ use std::sync::{Arc, atomic::AtomicBool, mpsc};
 use thiserror::Error;
 
 use crate::{
-    game::GameStateError,
-    notation::parse_algebraic,
-    search::iterative_deepening,
+    game::GameStateError, history::HistoryHeuristic, notation::parse_algebraic,
+    search::iterative_deepening, transposition::TranspositionTable,
 };
 
 pub use crate::{
     game::GameState,
     notation::fmt_pgn_moves,
-    search::{EngineEvent, EngineLimits, Score},
+    search::search_types::{EngineEvent, EngineLimits, Score},
 };
 
 pub enum EngineCommand {
@@ -112,12 +112,17 @@ enum GoldFishError {
 
 struct GoldFish {
     gamestate: Option<GameState>,
-    tt: Option<transposition::TranspositionTable>,
+    tt: Option<TranspositionTable>,
+    history: Option<HistoryHeuristic>,
 }
 
 impl GoldFish {
     fn new_engine() -> Self {
-        Self { gamestate: None, tt: None }
+        Self {
+            gamestate: None,
+            tt: None,
+            history: None,
+        }
     }
 
     fn new_position_from_fen(&mut self, fen: &str) -> Result<(), GoldFishError> {
@@ -135,7 +140,9 @@ impl GoldFish {
         F: FnMut(EngineEvent),
     {
         match &mut self.gamestate {
-            Some(gs) => iterative_deepening(gs, limits, stop, &mut self.tt, callback),
+            Some(gs) => {
+                iterative_deepening(gs, limits, stop, &mut self.tt, &mut self.history, callback)
+            }
             None => return Err(GoldFishError::GameStateNotInitialised),
         };
         Ok(())

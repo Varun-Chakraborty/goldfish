@@ -1,4 +1,7 @@
-use std::{sync::{Arc, atomic::AtomicBool, mpsc}, thread};
+use std::{
+    sync::{Arc, atomic::AtomicBool, mpsc},
+    thread,
+};
 
 use goldfish::{
     EngineCommand,
@@ -19,7 +22,7 @@ fn main() {
 
     // let fen = "3nr1R1/3K1kpp/8/7P/1R4p1/6P1/8/8 b - - 0 1";
     let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1";
-    let mut gs = GameState::from_fen(fen).unwrap();
+    let gs = GameState::from_fen(fen).unwrap();
     if let Err(e) = cmd_sender.send(EngineCommand::Init {
         fen: fen.to_string(),
         moves: None,
@@ -41,29 +44,46 @@ fn main() {
                 Event(event) => match event {
                     IterationInfo(info) => {
                         let best_line =
-                            fmt_pgn_moves(&mut gs, info.best_line.as_ref().expect("No best moves"))
+                            fmt_pgn_moves(&gs, info.best_line.as_ref().expect("No best moves"))
                                 .join(", ");
                         let search_stats = info.search_stats.expect("No search stats");
                         println!(
-                            "d{} score: {} line: {} qnodes per leaf: {:.2} nodes: {} nps: {:.2} branching_factor: {:.2} growth_factor: {:.2} examined_moves per cutoff: {:.2} examined_moves per available move: {:.2} hit rate: {:.5}, exact hit rate: {:.5}",
+                            "\nd{} score={} {}n ({}n) {:.2}Mn/s leaf={:.2}% qnodes/leaf={:.2} ebf={:.2} mpc={:.2} me={:.2} hit={:.2}%\npv: {}",
                             info.depth,
                             info.raw_score,
-                            best_line,
-                            search_stats.search_counters.qnodes as f64 / search_stats.search_counters.leaf_nodes as f64,
-                            search_stats.search_counters.nodes,
-                            info.nps,
+                            match search_stats.search_counters.nodes {
+                                0..=99999 => format!(
+                                    "{:.2}k",
+                                    search_stats.search_counters.nodes as f64 / 1000.0
+                                ),
+                                n => format!("{:.2}M", n as f64 / 1_000_000.0),
+                            },
+                            match search_stats.delta {
+                                -99_999..=99_999 =>
+                                    format!("{:+.2}k", search_stats.delta as f64 / 1_000.0),
+                                n => format!("{:+.2}M", n as f64 / 1_000_000.0),
+                            },
+                            info.nps as f64 / 1_000_000.0,
+                            search_stats.search_counters.leaf_nodes as f64
+                                / search_stats.search_counters.nodes as f64
+                                * 100.0,
+                            search_stats.search_counters.qnodes as f64
+                                / search_stats.search_counters.leaf_nodes as f64,
                             search_stats.branching_factor,
-                            search_stats.growth_factor,
-                            search_stats.search_counters.examined_moves as f64 / (search_stats.search_counters.cutoffs).max(1) as f64,
-                            search_stats.search_counters.examined_moves as f64 / search_stats.search_counters.available_moves as f64,
-                            search_stats.tt_hit_rate,
-                            search_stats.tt_exact_hit_rate
+                            search_stats.search_counters.examined_moves as f64
+                                / (search_stats.search_counters.cutoffs).max(1) as f64,
+                            search_stats.search_counters.examined_moves as f64
+                                / search_stats.search_counters.available_moves as f64,
+                            search_stats.tt_stats.hits as f64
+                                / search_stats.tt_stats.probes.max(1) as f64
+                                * 100.0,
+                            best_line,
                         )
                     }
                     SearchFinished(_) => {
                         cmd_sender.send(EngineCommand::Quit).unwrap();
-                        break
-                    },
+                        break;
+                    }
                     _ => eprintln!("Unexpected event"),
                 },
                 Command(line) => println!("{}", line),

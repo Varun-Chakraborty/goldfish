@@ -1,13 +1,14 @@
 use crate::types::Move;
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Default)]
 pub enum Bound {
+    #[default]
     Exact,
     Lower,
     Upper,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct TTEntry {
     pub key: u64,
     pub depth: u32,
@@ -16,25 +17,32 @@ pub struct TTEntry {
     pub bound: Bound,
 }
 
+#[derive(Default)]
+pub struct TTStats {
+    pub hits: u64,
+    pub probes: u64,
+}
+
 pub struct TranspositionTable {
-    entries: Vec<Option<TTEntry>>,
-    probes: u64,
-    hits: u64,
-    exact_hits: u64,
+    entries: Vec<TTEntry>,
     mate_threshold: i32,
+    tt_stats: TTStats,
 }
 
 impl TranspositionTable {
     pub fn new_table(size_mb: usize, mate_threshold: i32) -> Self {
-        let bytes = size_mb * 1024 * 1024;
-        let entries = bytes / std::mem::size_of::<Option<TTEntry>>();
+        let size_of_entry = std::mem::size_of::<TTEntry>();
+        let entries = size_mb * 1024 * 1024 / size_of_entry;
+
+        println!(
+            "Transposition table size: {entries} entries, {:.2} MB",
+            size_of_entry * entries / 1024 / 1024
+        );
 
         Self {
-            entries: vec![None; entries],
-            probes: 0,
-            hits: 0,
-            exact_hits: 0,
+            entries: vec![TTEntry::default(); entries],
             mate_threshold,
+            tt_stats: TTStats::default(),
         }
     }
 
@@ -64,31 +72,29 @@ impl TranspositionTable {
 
     pub fn store(&mut self, hash: u64, ply: u32, mut entry: TTEntry) {
         let idx = self.index(hash);
-        if let Some(cell) = self.entries.get(idx)
-            && let Some(stored_entry) = cell
-        {
-            if entry.depth > stored_entry.depth
-                || (entry.bound == Bound::Exact && stored_entry.bound != Bound::Exact)
+
+        if let Some(stored_entry) = self.entries.get(idx) {
+            if stored_entry.key == 0
+                || entry.depth > stored_entry.depth
+                || (entry.depth == stored_entry.depth
+                    && (entry.bound == Bound::Exact && stored_entry.bound != Bound::Exact))
             {
                 entry.score = self.score_to_tt(entry.score, ply);
-                self.entries[idx] = Some(entry);
+                self.entries[idx] = entry;
             }
         } else {
             entry.score = self.score_to_tt(entry.score, ply);
-            self.entries[idx] = Some(entry);
+            self.entries[idx] = entry;
         }
     }
 
     pub fn probe(&mut self, hash: u64, ply: u32, depth: Option<u32>) -> Option<TTEntry> {
-        self.probes += 1;
+        self.tt_stats.probes += 1;
         let idx = self.index(hash);
-        match &self.entries[idx] {
+        match self.entries.get(idx) {
             Some(entry) if entry.key == hash => {
-                self.hits += 1;
                 if depth.is_none_or(|d| entry.depth >= d) {
-                    if entry.bound == Bound::Exact {
-                        self.exact_hits += 1;
-                    }
+                    self.tt_stats.hits += 1;
                     let mut entry = entry.clone();
                     entry.score = self.score_from_tt(entry.score, ply);
                     Some(entry)
@@ -100,11 +106,7 @@ impl TranspositionTable {
         }
     }
 
-    pub fn hit_rate(&self) -> f64 {
-        self.hits as f64 / self.probes as f64
-    }
-
-    pub fn exact_hit_rate(&self) -> f64 {
-        self.exact_hits as f64 / self.probes as f64
+    pub fn stats(&mut self) -> &mut TTStats {
+        &mut self.tt_stats
     }
 }

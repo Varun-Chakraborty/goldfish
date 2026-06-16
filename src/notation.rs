@@ -1,10 +1,10 @@
 use crate::{
-    game::{GameState, MoveGenMode, Undo},
+    game::{GameState, MoveGenMode},
     types::{CastleSide, Coordinate, Move, PieceType, Square},
 };
 
-pub fn fmt_pgn_moves(gs: &mut GameState, moves: &[Move]) -> Vec<String> {
-    let mut undo_stack: Vec<Undo> = vec![];
+pub fn fmt_pgn_moves(gs: &GameState, moves: &[Move]) -> Vec<String> {
+    let mut gs = gs.clone();
     let mut moves_string: Vec<String> = vec![];
 
     for m in moves {
@@ -40,9 +40,19 @@ pub fn fmt_pgn_moves(gs: &mut GameState, moves: &[Move]) -> Vec<String> {
                 let same_file = peers.iter().any(|c| c.from.file() == m.from.file());
                 let same_rank = peers.iter().any(|c| c.from.rank() == m.from.rank());
                 if !same_file {
-                    m.from.to_algebraic().chars().next().expect("algebraic has at least 1 char").to_string()
+                    m.from
+                        .to_algebraic()
+                        .chars()
+                        .next()
+                        .expect("algebraic has at least 1 char")
+                        .to_string()
                 } else if !same_rank {
-                    m.from.to_algebraic().chars().nth(1).expect("algebraic has at least 2 chars").to_string()
+                    m.from
+                        .to_algebraic()
+                        .chars()
+                        .nth(1)
+                        .expect("algebraic has at least 2 chars")
+                        .to_string()
                 } else {
                     m.from.to_algebraic()
                 }
@@ -53,7 +63,12 @@ pub fn fmt_pgn_moves(gs: &mut GameState, moves: &[Move]) -> Vec<String> {
 
         let is_capture = m.captured.is_some() || m.en_passant;
 
-        let from_file = m.from.to_algebraic().chars().next().expect("algebraic has at least 1 char");
+        let from_file = m
+            .from
+            .to_algebraic()
+            .chars()
+            .next()
+            .expect("algebraic has at least 1 char");
         let capture_str = if is_capture {
             if m.piece == PieceType::Pawn {
                 format!("{}x", from_file)
@@ -72,7 +87,7 @@ pub fn fmt_pgn_moves(gs: &mut GameState, moves: &[Move]) -> Vec<String> {
             _ => "",
         };
 
-        undo_stack.push(gs.make_move(*m));
+        gs.make_move(*m);
 
         let check_str = if gs.in_check(gs.turn) {
             if gs.legal_moves(MoveGenMode::All).is_empty() {
@@ -87,10 +102,6 @@ pub fn fmt_pgn_moves(gs: &mut GameState, moves: &[Move]) -> Vec<String> {
         moves_string.push(format!(
             "{piece_char}{disambig}{capture_str}{to_str}{promo_str}{check_str}"
         ));
-    }
-
-    while let Some(undo) = undo_stack.pop() {
-        gs.unmake_move(undo);
     }
 
     moves_string

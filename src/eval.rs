@@ -3,7 +3,7 @@ use crate::{
     types::{Color, Coordinate, PieceType, Square},
 };
 
-fn piece_value(piece: &PieceType) -> i32 {
+pub fn piece_value(piece: &PieceType) -> i32 {
     match piece {
         PieceType::Pawn => 100,
         PieceType::Knight => 320,

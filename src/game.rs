@@ -2,10 +2,7 @@ use std::num::ParseIntError;
 
 use crate::{
     board::{Board, BoardError},
-    types::{
-        CastleSide, CastlingRights, Color, ColorError, Coordinate, Move,
-        PieceType, Square,
-    },
+    types::{CastleSide, CastlingRights, Color, ColorError, Coordinate, Move, PieceType, Square},
     zobrist::{
         compute_hash, get_black_to_move, get_castling_rights, get_en_passant_files, get_piece_sq,
     },
@@ -616,12 +613,10 @@ impl GameState {
         }
         self.board
             .set(Coordinate::new_coordinate(4, rank), Square::Empty);
-        self.zobrist ^=
-            get_piece_sq(PieceType::King, us, Coordinate::new_coordinate(4, rank));
+        self.zobrist ^= get_piece_sq(PieceType::King, us, Coordinate::new_coordinate(4, rank));
         self.board
             .set(Coordinate::new_coordinate(7, rank), Square::Empty);
-        self.zobrist ^=
-            get_piece_sq(PieceType::Rook, us, Coordinate::new_coordinate(7, rank));
+        self.zobrist ^= get_piece_sq(PieceType::Rook, us, Coordinate::new_coordinate(7, rank));
 
         self.board.set(
             Coordinate::new_coordinate(6, rank),
@@ -630,8 +625,7 @@ impl GameState {
                 piece: PieceType::King,
             },
         );
-        self.zobrist ^=
-            get_piece_sq(PieceType::King, us, Coordinate::new_coordinate(6, rank));
+        self.zobrist ^= get_piece_sq(PieceType::King, us, Coordinate::new_coordinate(6, rank));
         self.board.set(
             Coordinate::new_coordinate(5, rank),
             Square::Occupied {
@@ -639,8 +633,7 @@ impl GameState {
                 piece: PieceType::Rook,
             },
         );
-        self.zobrist ^=
-            get_piece_sq(PieceType::Rook, us, Coordinate::new_coordinate(5, rank));
+        self.zobrist ^= get_piece_sq(PieceType::Rook, us, Coordinate::new_coordinate(5, rank));
     }
 
     fn apply_queenside_castle(&mut self, us: Color, rank: u8) {
@@ -650,12 +643,10 @@ impl GameState {
         }
         self.board
             .set(Coordinate::new_coordinate(4, rank), Square::Empty);
-        self.zobrist ^=
-            get_piece_sq(PieceType::King, us, Coordinate::new_coordinate(4, rank));
+        self.zobrist ^= get_piece_sq(PieceType::King, us, Coordinate::new_coordinate(4, rank));
         self.board
             .set(Coordinate::new_coordinate(0, rank), Square::Empty);
-        self.zobrist ^=
-            get_piece_sq(PieceType::Rook, us, Coordinate::new_coordinate(0, rank));
+        self.zobrist ^= get_piece_sq(PieceType::Rook, us, Coordinate::new_coordinate(0, rank));
 
         self.board.set(
             Coordinate::new_coordinate(2, rank),
@@ -664,8 +655,7 @@ impl GameState {
                 piece: PieceType::King,
             },
         );
-        self.zobrist ^=
-            get_piece_sq(PieceType::King, us, Coordinate::new_coordinate(2, rank));
+        self.zobrist ^= get_piece_sq(PieceType::King, us, Coordinate::new_coordinate(2, rank));
         self.board.set(
             Coordinate::new_coordinate(3, rank),
             Square::Occupied {
@@ -673,8 +663,7 @@ impl GameState {
                 piece: PieceType::Rook,
             },
         );
-        self.zobrist ^=
-            get_piece_sq(PieceType::Rook, us, Coordinate::new_coordinate(3, rank));
+        self.zobrist ^= get_piece_sq(PieceType::Rook, us, Coordinate::new_coordinate(3, rank));
     }
 
     pub fn make_move(&mut self, m: Move) -> Undo {
@@ -980,7 +969,8 @@ mod tests {
         game::GameState,
         notation::parse_algebraic,
         types::{
-            Color::{Black, White}, PieceType::{Bishop, Knight, Pawn, Queen, Rook}
+            Color::{Black, White},
+            PieceType::{Bishop, Knight, Pawn, Queen, Rook},
         },
     };
 
