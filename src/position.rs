@@ -37,7 +37,7 @@ pub struct Position {
 
 impl Position {
     pub fn quick_draw_analysis(gs: &GameState) -> PositionStatus {
-        match gs.halfmove_clock() >= 50 {
+        match gs.halfmove_clock() >= 100 {
             true => PositionStatus::Draw(DrawReason::FiftyMoveRule),
             false => match gs
                 .history

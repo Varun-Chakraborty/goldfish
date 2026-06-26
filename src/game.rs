@@ -961,6 +961,40 @@ impl GameState {
     pub fn halfmove_clock(&self) -> u32 {
         self.halfmove_clock
     }
+
+    pub fn representation(&self) -> String {
+        let mut repr = String::new();
+        for i in (0..8).rev() {
+            repr += &format!("{} ", 8 - i);
+            for j in 0..8 {
+                repr += &format!(
+                    "{}",
+                    match self.board.get(Coordinate::new_coordinate(j, i)) {
+                        Square::Empty => " . ".to_string(),
+                        Square::Occupied { color, piece } => {
+                            let p = match piece {
+                                PieceType::Rook => " R ",
+                                PieceType::Knight => " N ",
+                                PieceType::Bishop => " B ",
+                                PieceType::Queen => " Q ",
+                                PieceType::King => " K ",
+                                PieceType::Pawn => " P ",
+                            };
+                            if color == Color::Black {
+                                p.to_lowercase()
+                            } else {
+                                p.to_string()
+                            }
+                        }
+                    }
+                );
+            }
+            repr += "\n";
+        }
+        repr += &format!("   a  b  c  d  e  f  g  h\n");
+
+        repr
+    }
 }
 
 #[cfg(test)]

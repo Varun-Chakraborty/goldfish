@@ -13,6 +13,8 @@ pub fn fmt_pgn_moves(gs: &GameState, moves: &[Move]) -> Vec<String> {
                 CastleSide::Kingside => moves_string.push("O-O".to_string()),
                 CastleSide::Queenside => moves_string.push("O-O-O".to_string()),
             }
+
+            gs.make_move(*m);
             continue;
         }
 
