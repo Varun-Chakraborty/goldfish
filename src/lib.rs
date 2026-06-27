@@ -14,14 +14,18 @@ use std::sync::{Arc, atomic::AtomicBool, mpsc};
 use thiserror::Error;
 
 use crate::{
-    game::GameStateError, history::HistoryHeuristic, notation::parse_algebraic,
-    search::iterative_deepening, transposition::TranspositionTable,
+    game::GameStateError,
+    history::HistoryHeuristic,
+    notation::parse_algebraic,
+    search::{iterative_deepening, search_types::IterationInfo},
+    transposition::TranspositionTable,
+    types::Move,
 };
 
 pub use crate::{
     game::GameState,
     notation::fmt_pgn_moves,
-    search::search_types::{EngineEvent, EngineLimits, Score},
+    search::search_types::{EngineLimits, Score},
 };
 
 pub enum EngineCommand {
@@ -29,10 +33,26 @@ pub enum EngineCommand {
         fen: String,
         moves: Option<Vec<String>>,
     },
+    SetOption {
+        name: String,
+        value: String,
+    },
     Start {
         limits: EngineLimits,
     },
+    Debug,
     Quit,
+}
+
+pub enum EngineEvent {
+    IterationInfo(IterationInfo),
+    SearchFinished {
+        best_move: Option<Move>,
+        ponder: Option<Move>,
+    },
+    Debug {
+        fen: String,
+    },
 }
 
 pub enum UCIMessage {
@@ -45,6 +65,7 @@ pub struct EngineWorker {
     cmd_receiver: mpsc::Receiver<EngineCommand>,
     event_sender: mpsc::Sender<UCIMessage>,
     stop: Arc<AtomicBool>,
+    ponderhit: Arc<AtomicBool>,
 }
 
 impl EngineWorker {
@@ -52,12 +73,14 @@ impl EngineWorker {
         cmd_receiver: mpsc::Receiver<EngineCommand>,
         event_sender: mpsc::Sender<UCIMessage>,
         stop: Arc<AtomicBool>,
+        ponderhit: Arc<AtomicBool>,
     ) -> Self {
         Self {
             engine: GoldFish::new_engine(),
             cmd_receiver,
             event_sender,
             stop,
+            ponderhit,
         }
     }
 
@@ -79,16 +102,35 @@ impl EngineWorker {
                             }
                         }
                     }
+                    EngineCommand::SetOption { name, value } => {
+                        self.engine.set_option(&name, &value)
+                    }
                     EngineCommand::Start { limits } => {
-                        let result = self.engine.search(limits, &self.stop, |event| {
-                            if self.event_sender.send(UCIMessage::Event(event)).is_err() {
-                                eprintln!("Failed to send event");
-                            }
-                        });
+                        let result = self.engine.search(
+                            limits,
+                            &self.stop,
+                            &self.ponderhit,
+                            |event| {
+                                if self.event_sender.send(UCIMessage::Event(event)).is_err() {
+                                    eprintln!("Failed to send event");
+                                }
+                            },
+                        );
                         if let Err(e) = result {
                             eprintln!("Search error: {e}");
                         }
                     }
+                    EngineCommand::Debug => match self.engine.debug() {
+                        Ok(fen) => {
+                            if let Err(e) = self
+                                .event_sender
+                                .send(UCIMessage::Event(EngineEvent::Debug { fen }))
+                            {
+                                eprintln!("Failed to send debug event: {e}");
+                            }
+                        }
+                        Err(e) => eprintln!("Engine error: {e}"),
+                    },
                     EngineCommand::Quit => break,
                 },
                 Err(e) => {
@@ -125,6 +167,16 @@ impl GoldFish {
         }
     }
 
+    fn set_option(&mut self, name: &str, value: &str) {
+        match name {
+            "Hash" => {
+                let hash = value.parse().unwrap();
+                self.tt = Some(TranspositionTable::new_table(hash));
+            }
+            _ => {}
+        }
+    }
+
     fn new_position_from_fen(&mut self, fen: &str) -> Result<(), GoldFishError> {
         self.gamestate = Some(GameState::from_fen(fen)?);
         Ok(())
@@ -134,15 +186,22 @@ impl GoldFish {
         &mut self,
         limits: EngineLimits,
         stop: &Arc<AtomicBool>,
+        ponderhit: &Arc<AtomicBool>,
         callback: F,
     ) -> Result<(), GoldFishError>
     where
         F: FnMut(EngineEvent),
     {
         match &mut self.gamestate {
-            Some(gs) => {
-                iterative_deepening(gs, limits, stop, &mut self.tt, &mut self.history, callback)
-            }
+            Some(gs) => iterative_deepening(
+                gs,
+                limits,
+                stop,
+                ponderhit,
+                &mut self.tt,
+                &mut self.history,
+                callback,
+            ),
             None => return Err(GoldFishError::GameStateNotInitialised),
         };
         Ok(())
@@ -157,6 +216,13 @@ impl GoldFish {
             None => return Err(GoldFishError::GameStateNotInitialised),
         };
         Ok(())
+    }
+
+    fn debug(&self) -> Result<String, GoldFishError> {
+        match &self.gamestate {
+            Some(gs) => Ok(gs.to_fen()),
+            None => Err(GoldFishError::GameStateNotInitialised),
+        }
     }
 }
 

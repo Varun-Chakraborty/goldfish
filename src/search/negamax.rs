@@ -26,7 +26,6 @@ pub fn negamax(
     search_context: &mut SearchContext,
 ) -> SearchResult {
     let org_alpha = alpha;
-    let org_beta = beta;
     search_context.search_stats.search_counters.nodes += 1;
 
     if let Some(entry) = search_context.tt.probe(gs.zobrist, ply, Some(depth)) {
@@ -222,7 +221,7 @@ pub fn negamax(
             depth,
             score: search_result.score,
             best_move: search_result.best_move,
-            bound: if search_result.score >= org_beta {
+            bound: if search_result.score >= beta {
                 Bound::Lower
             } else if search_result.score <= org_alpha {
                 Bound::Upper

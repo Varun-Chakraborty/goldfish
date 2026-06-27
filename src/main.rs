@@ -8,14 +8,24 @@ use std::{
     thread,
 };
 
-use goldfish::{EngineCommand, EngineEvent, EngineLimits, EngineWorker, Score, UCIMessage};
+use goldfish::{
+    EngineCommand,
+    EngineEvent::{Debug, IterationInfo, SearchFinished},
+    EngineLimits, EngineWorker, Score, UCIMessage,
+};
 
 fn main() {
     let (cmd_sender, cmd_receiver) = mpsc::channel();
     let (ucimsg_sender, ucimsg_receiver) = mpsc::channel();
     let stop = Arc::new(AtomicBool::new(false));
+    let ponderhit = Arc::new(AtomicBool::new(false));
 
-    let mut worker = EngineWorker::new(cmd_receiver, ucimsg_sender.clone(), stop.clone());
+    let mut worker = EngineWorker::new(
+        cmd_receiver,
+        ucimsg_sender.clone(),
+        stop.clone(),
+        ponderhit.clone(),
+    );
 
     thread::spawn(move || worker.run());
     thread::spawn(move || {
@@ -49,7 +59,12 @@ fn main() {
 
                     match args.next() {
                         Some("uci") => {
-                            println!("id name GoldFish\nid author Varun\nuciok");
+                            println!("id name GoldFish");
+                            println!("id author Varun");
+                            println!();
+                            println!("option name Hash type spin default 64 min 0 max 1048576");
+                            println!("option name Ponder type check default true");
+                            println!("uciok");
                         }
                         Some("isready") => println!("readyok"),
                         Some("q") | Some("quit") => {
@@ -59,63 +74,117 @@ fn main() {
                             println!("Goodbye!");
                             break;
                         }
-                        Some("position") => match args.next() {
-                            Some("startpos") => {
-                                if let Err(e) = cmd_sender.send(EngineCommand::Init {
-                                    fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-                                        .to_string(),
-                                    moves: None,
-                                }) {
-                                    println!("{e}");
+                        Some("position") => {
+                            let fen;
+                            let mut moves = None;
+                            match args.next() {
+                                Some("startpos") => {
+                                    fen =
+                                        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+                                            .to_string();
+                                }
+                                Some("fen") => {
+                                    fen = args.by_ref().take(6).collect::<Vec<_>>().join(" ");
+                                }
+                                _ => {
+                                    eprintln!("Unsure what you mean. Type 'uci' to get started.");
+                                    continue;
                                 }
                             }
-                            Some("fen") => {
-                                let fen = args.by_ref().take(6).collect::<Vec<_>>().join(" ");
-                                if args.next() == Some("moves") {
-                                    let moves = args.map(|m| m.to_string()).collect();
-                                    if let Err(e) = cmd_sender.send(EngineCommand::Init {
-                                        fen,
-                                        moves: Some(moves),
-                                    }) {
-                                        println!("{e}");
-                                    }
-                                } else if let Err(e) =
-                                    cmd_sender.send(EngineCommand::Init { fen, moves: None })
-                                {
-                                    println!("{e}");
-                                }
+                            let argument = args.next();
+                            if argument == Some("moves") || argument == Some("move") {
+                                moves = Some(args.map(|m| m.to_string()).collect());
                             }
-                            _ => {
-                                println!("Unsure what you mean. Type 'uci' to get started.")
+                            if let Err(e) = cmd_sender.send(EngineCommand::Init { fen, moves }) {
+                                println!("{e}");
                             }
-                        },
+                        }
                         Some("go") => {
                             stop.store(false, Ordering::Relaxed);
-                            match args.next() {
-                                Some("depth") => match args.next().and_then(|d| d.parse().ok()) {
-                                    Some(depth) => {
-                                        if let Err(e) = cmd_sender.send(EngineCommand::Start {
-                                            limits: EngineLimits { depth: Some(depth) },
-                                        }) {
-                                            println!("{e}");
-                                        }
+                            ponderhit.store(false, Ordering::Relaxed);
+                            let mut limits = EngineLimits::default();
+                            while let Some(arg) = args.next() {
+                                match arg {
+                                    "infinite" => {
+                                        limits = EngineLimits::default();
+                                        break;
                                     }
-                                    None => println!("Depth not specified"),
-                                },
-                                _ => {
-                                    println!("Unsure what you mean. Type 'uci' to get started.")
+                                    "depth" => match args.next().and_then(|d| d.parse().ok()) {
+                                        Some(depth) => limits.depth = Some(depth),
+                                        None => println!("Depth not specified"),
+                                    },
+                                    "wtime" => match args.next().and_then(|d| d.parse().ok()) {
+                                        Some(depth) => limits.wtime = Some(depth),
+                                        None => println!("wtime not specified"),
+                                    },
+                                    "btime" => match args.next().and_then(|d| d.parse().ok()) {
+                                        Some(depth) => limits.btime = Some(depth),
+                                        None => println!("btime not specified"),
+                                    },
+                                    "winc" => match args.next().and_then(|d| d.parse().ok()) {
+                                        Some(depth) => limits.winc = Some(depth),
+                                        None => println!("winc not specified"),
+                                    },
+                                    "binc" => match args.next().and_then(|d| d.parse().ok()) {
+                                        Some(depth) => limits.binc = Some(depth),
+                                        None => println!("binc not specified"),
+                                    },
+                                    "movestogo" => match args.next().and_then(|d| d.parse().ok()) {
+                                        Some(depth) => limits.movestogo = Some(depth),
+                                        None => println!("movestogo not specified"),
+                                    },
+                                    "movetime" => match args.next().and_then(|d| d.parse().ok()) {
+                                        Some(depth) => limits.movetime = Some(depth),
+                                        None => println!("movetime not specified"),
+                                    },
+                                    "nodes" => match args.next().and_then(|d| d.parse().ok()) {
+                                        Some(depth) => limits.nodes = Some(depth),
+                                        None => println!("nodes not specified"),
+                                    },
+                                    "ponder" => limits.ponder = true,
+                                    _ => {
+                                        eprintln!(
+                                            "Unsure what you mean. Type 'uci' to get started."
+                                        );
+                                        break;
+                                    }
                                 }
+                            }
+                            if let Err(e) = cmd_sender.send(EngineCommand::Start { limits }) {
+                                println!("{e}");
                             }
                         }
                         Some("stop") => stop.store(true, Ordering::Relaxed),
-                        Some("setoption") => {}
-                        Some(_) => println!("Unsure what you mean. Type 'uci' to get started."),
-                        None => println!("No command received. Type 'uci' to get started."),
+                        Some("ponderhit") => ponderhit.store(true, Ordering::Relaxed),
+                        Some("setoption") => {
+                            let mut name = vec![];
+                            while let Some(arg) = args.next()
+                                && arg != "value"
+                            {
+                                name.push(arg);
+                            }
+                            let value: String = args.collect();
+                            let name = name.join(" ");
+                            if !name.is_empty()
+                                && !value.is_empty()
+                                && let Err(e) =
+                                    cmd_sender.send(EngineCommand::SetOption { name, value })
+                            {
+                                println!("{e}");
+                            }
+                        }
+                        Some("d") => {
+                            if let Err(e) = cmd_sender.send(EngineCommand::Debug) {
+                                println!("{e}");
+                            }
+                        }
+                        Some(_) => eprintln!("Unsure what you mean. Type 'uci' to get started."),
+                        None => eprintln!("No command received. Type 'uci' to get started."),
                     }
                 }
                 UCIMessage::Event(event) => match event {
-                    EngineEvent::IterationInfo(info) => println!(
-                        "info depth {} seldepth {} multipv 1 score {} nodes {} nps {} pv {}",
+                    IterationInfo(info) => println!(
+                        "info depth {} seldepth {} multipv 1 score {} nodes {} nps {} hashfull {} time {} pv {}",
                         info.depth,
                         info.seldepth,
                         match info.score {
@@ -124,6 +193,8 @@ fn main() {
                         },
                         info.nodes,
                         info.nps,
+                        info.hashfull,
+                        info.time,
                         info.best_line
                             .unwrap_or_default()
                             .into_iter()
@@ -131,11 +202,14 @@ fn main() {
                             .collect::<Vec<_>>()
                             .join(" ")
                     ),
-                    EngineEvent::SearchFinished(m) | EngineEvent::SearchStopped(m) => {
-                        if let Some(m) = m {
-                            println!("bestmove {}", m.to_algebraic())
+                    SearchFinished { best_move, ponder } => match (best_move, ponder) {
+                        (Some(m), Some(p)) => {
+                            println!("bestmove {} ponder {}", m.to_algebraic(), p.to_algebraic())
                         }
-                    }
+                        (Some(m), None) => println!("bestmove {}", m.to_algebraic()),
+                        _ => println!("bestmove resign"),
+                    },
+                    Debug { fen } => println!("fen: {fen}"),
                 },
             },
             Err(e) => println!("{e}"),

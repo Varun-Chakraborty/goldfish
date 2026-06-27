@@ -1,4 +1,7 @@
-use crate::types::Move;
+use crate::{
+    search::{MATE, MAX_PLY},
+    types::Move,
+};
 
 #[derive(Clone, Copy, PartialEq, Default)]
 pub enum Bound {
@@ -21,28 +24,24 @@ pub struct TTEntry {
 pub struct TTStats {
     pub hits: u64,
     pub probes: u64,
+    pub hashfull: u64,
 }
 
 pub struct TranspositionTable {
     entries: Vec<TTEntry>,
-    mate_threshold: i32,
     tt_stats: TTStats,
+    cell_count: usize,
 }
 
 impl TranspositionTable {
-    pub fn new_table(size_mb: usize, mate_threshold: i32) -> Self {
+    pub fn new_table(size_mb: usize) -> Self {
         let size_of_entry = std::mem::size_of::<TTEntry>();
-        let entries = size_mb * 1024 * 1024 / size_of_entry;
-
-        println!(
-            "Transposition table size: {entries} entries, {:.2} MB",
-            size_of_entry * entries / 1024 / 1024
-        );
+        let cell_count = size_mb * 1024 * 1024 / size_of_entry;
 
         Self {
-            entries: vec![TTEntry::default(); entries],
-            mate_threshold,
+            entries: vec![TTEntry::default(); cell_count],
             tt_stats: TTStats::default(),
+            cell_count,
         }
     }
 
@@ -51,9 +50,9 @@ impl TranspositionTable {
     }
 
     pub fn score_to_tt(&self, score: i32, ply: u32) -> i32 {
-        if score > self.mate_threshold {
+        if score > MATE - MAX_PLY as i32 {
             score + ply as i32
-        } else if score < -self.mate_threshold {
+        } else if score < -MATE + MAX_PLY as i32 {
             score - ply as i32
         } else {
             score
@@ -61,9 +60,9 @@ impl TranspositionTable {
     }
 
     pub fn score_from_tt(&self, score: i32, ply: u32) -> i32 {
-        if score > self.mate_threshold {
+        if score > MATE - MAX_PLY as i32 {
             score - (ply as i32)
-        } else if score < -self.mate_threshold {
+        } else if score < -MATE + MAX_PLY as i32 {
             score + (ply as i32)
         } else {
             score
@@ -107,6 +106,14 @@ impl TranspositionTable {
     }
 
     pub fn stats(&mut self) -> &mut TTStats {
+        let step = self.cell_count / 1000;
+        self.tt_stats.hashfull = self
+            .entries
+            .iter()
+            .step_by(step)
+            .take(1000)
+            .filter(|e| e.key != 0)
+            .count() as u64;
         &mut self.tt_stats
     }
 }

@@ -1,6 +1,9 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Instant,
 };
 
 use crate::{
@@ -10,6 +13,7 @@ use crate::{
     types::Move,
 };
 
+#[derive(Debug)]
 pub struct PVTable {
     pub table: [[Option<Move>; MAX_PLY as usize]; MAX_PLY as usize],
     pub length: [u32; MAX_PLY as usize],
@@ -30,7 +34,11 @@ pub struct SearchContext<'a> {
     pub pv_table: &'a mut PVTable,
     pub tt: &'a mut TranspositionTable,
     pub stop: &'a Arc<AtomicBool>,
+    pub ponder: bool,
+    pub ponderhit: &'a Arc<AtomicBool>,
     pub history_heuristics: &'a mut HistoryHeuristic,
+    pub start_time: Instant,
+    pub node_limit: Option<u64>,
 }
 
 impl<'a> SearchContext<'a> {
@@ -64,7 +72,9 @@ pub struct IterationInfo {
     pub raw_score: i32,
     pub best_line: Option<Vec<Move>>,
     pub nodes: u64,
+    pub time: u128,
     pub nps: u64,
+    pub hashfull: u64,
     pub search_stats: Option<SearchStats>,
 }
 
@@ -92,12 +102,15 @@ impl SearchStats {
     }
 }
 
-pub enum EngineEvent {
-    IterationInfo(IterationInfo),
-    SearchFinished(Option<Move>),
-    SearchStopped(Option<Move>),
-}
-
+#[derive(Default)]
 pub struct EngineLimits {
+    pub ponder: bool,
     pub depth: Option<u32>,
+    pub btime: Option<u128>,
+    pub wtime: Option<u128>,
+    pub binc: Option<u128>,
+    pub winc: Option<u128>,
+    pub movestogo: Option<u32>,
+    pub movetime: Option<u128>,
+    pub nodes: Option<u64>,
 }

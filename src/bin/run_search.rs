@@ -5,7 +5,7 @@ use std::{
 
 use goldfish::{
     EngineCommand,
-    EngineEvent::{IterationInfo, SearchFinished},
+    EngineEvent::{Debug, IterationInfo, SearchFinished},
     EngineLimits, EngineWorker, GameState,
     UCIMessage::{Command, Event},
     fmt_pgn_moves,
@@ -15,8 +15,9 @@ fn main() {
     let (cmd_sender, cmd_receiver) = mpsc::channel();
     let (event_sender, event_receiver) = mpsc::channel();
     let stop = Arc::new(AtomicBool::new(false));
+    let ponderhit = Arc::new(AtomicBool::new(false));
 
-    let mut worker = EngineWorker::new(cmd_receiver, event_sender, stop.clone());
+    let mut worker = EngineWorker::new(cmd_receiver, event_sender, stop.clone(), ponderhit.clone());
 
     thread::spawn(move || worker.run());
 
@@ -31,9 +32,8 @@ fn main() {
         return;
     };
 
-    if let Err(e) = cmd_sender.send(EngineCommand::Start {
-        limits: EngineLimits { depth: Some(19) },
-    }) {
+    let limits = EngineLimits::default();
+    if let Err(e) = cmd_sender.send(EngineCommand::Start { limits }) {
         eprintln!("Failed to send Start: {e}");
         return;
     };
@@ -43,9 +43,8 @@ fn main() {
             Ok(msg) => match msg {
                 Event(event) => match event {
                     IterationInfo(info) => {
-                        let best_line =
-                            fmt_pgn_moves(&gs, info.best_line.as_ref().expect("No best moves"))
-                                .join(", ");
+                        let best_line = info.best_line.as_ref().expect("No best moves");
+                        let best_line = fmt_pgn_moves(&gs, best_line).join(", ");
                         let search_stats = info.search_stats.expect("No search stats");
                         println!(
                             "\nd{} score={} {}n ({}n) {:.2}Mn/s leaf={:.2}% qnodes/leaf={:.2} ebf={:.2} mpc={:.2} me={:.2} hit={:.2}%\npv: {}",
@@ -80,11 +79,11 @@ fn main() {
                             best_line,
                         )
                     }
-                    SearchFinished(_) => {
+                    SearchFinished { .. } => {
                         cmd_sender.send(EngineCommand::Quit).unwrap();
                         break;
                     }
-                    _ => eprintln!("Unexpected event"),
+                    Debug { .. } => {}
                 },
                 Command(line) => println!("{}", line),
             },
