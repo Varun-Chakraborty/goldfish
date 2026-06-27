@@ -21,8 +21,9 @@ fn main() {
 
     thread::spawn(move || worker.run());
 
-    // let fen = "3nr1R1/3K1kpp/8/7P/1R4p1/6P1/8/8 b - - 0 1";
-    let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1";
+    // let fen = "3nr1R1/5kpp/2K5/7P/1R4p1/6P1/8/8 w - - 0 1"; // tactical position
+    let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1"; // starting position
+    // let fen = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1"; // kiwipete position
     let gs = GameState::from_fen(fen).unwrap();
     if let Err(e) = cmd_sender.send(EngineCommand::Init {
         fen: fen.to_string(),
@@ -47,7 +48,7 @@ fn main() {
                         let best_line = fmt_pgn_moves(&gs, best_line).join(", ");
                         let search_stats = info.search_stats.expect("No search stats");
                         println!(
-                            "\nd{} score={} {}n ({}n) {:.2}Mn/s leaf={:.2}% qnodes/leaf={:.2} ebf={:.2} mpc={:.2} me={:.2} hit={:.2}%\npv: {}",
+                            "d{} score={} {}n ({}n) {:.2}Mn/s leaf={:.2}% qnodes/leaf={:.2} ebf={:.2} mpc={:.2} first_move_cutoffs={} me={:.2} hit={:.2}%\npv: {}",
                             info.depth,
                             info.raw_score,
                             match search_stats.search_counters.nodes {
@@ -71,6 +72,13 @@ fn main() {
                             search_stats.branching_factor,
                             search_stats.search_counters.examined_moves as f64
                                 / (search_stats.search_counters.cutoffs).max(1) as f64,
+                            match search_stats.search_counters.first_move_cutoffs {
+                                0..=99999 => format!(
+                                    "{:.2}k",
+                                    search_stats.search_counters.first_move_cutoffs as f64 / 1000.0
+                                ),
+                                n => format!("{:.2}M", n as f64 / 1_000_000.0),
+                            },
                             search_stats.search_counters.examined_moves as f64
                                 / search_stats.search_counters.available_moves as f64,
                             search_stats.tt_stats.hits as f64

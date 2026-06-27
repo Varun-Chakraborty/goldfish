@@ -9,7 +9,10 @@ use crate::{
         DRAW, MATE,
         ordermoves::ordermoves,
         quiescence,
-        search_types::{SearchContext, SearchResult},
+        search_types::{
+            SearchContext, SearchResult,
+            SearchType::{self, Scout},
+        },
     },
     transposition::{Bound, TTEntry},
     types::Move,
@@ -23,6 +26,7 @@ pub fn negamax(
     mut beta: i32,
     pv: &Option<Vec<Move>>,
     pvpath: bool,
+    search_type: SearchType,
     search_context: &mut SearchContext,
 ) -> SearchResult {
     let org_alpha = alpha;
@@ -155,7 +159,7 @@ pub fn negamax(
     let total_moves = legal.len();
     search_context.search_stats.search_counters.available_moves += total_moves as u64;
 
-    for m in legal {
+    for (i, &m) in legal.iter().enumerate() {
         if search_context.should_stop() {
             search_context.stopped = true;
             return SearchResult {
@@ -176,6 +180,7 @@ pub fn negamax(
                     .as_ref()
                     .and_then(|pv| pv.get(ply as usize))
                     .is_some_and(|bm| *bm == m),
+            search_type,
             search_context,
         );
         gs.unmake_move(undo);
@@ -203,10 +208,16 @@ pub fn negamax(
         alpha = alpha.max(search_result.score);
         search_context.search_stats.search_counters.examined_moves += 1;
         if alpha >= beta {
+            if i == 0 {
+                search_context
+                    .search_stats
+                    .search_counters
+                    .first_move_cutoffs += 1;
+            }
             if m.captured.is_none() {
                 search_context
                     .history_heuristics
-                    .reward(gs.turn, &m, depth as u16);
+                    .reward(gs.turn.opponent(), &m, depth as u16);
             }
             search_context.search_stats.search_counters.cutoffs += 1;
             break;

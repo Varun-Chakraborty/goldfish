@@ -28,6 +28,12 @@ impl PVTable {
     }
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum SearchType {
+    FullSearch,
+    Scout,
+}
+
 pub struct SearchContext<'a> {
     pub stopped: bool,
     pub search_stats: SearchStats,
@@ -86,6 +92,7 @@ pub struct SearchCounters {
     pub examined_moves: u64,
     pub cutoffs: u64,
     pub available_moves: u64,
+    pub first_move_cutoffs: u64,
 }
 
 #[derive(Default)]

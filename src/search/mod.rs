@@ -21,6 +21,7 @@ use crate::{
         quiescence::quiescence,
         search_types::{
             EngineLimits, IterationInfo, PVTable, Score, SearchContext, SearchStats,
+            SearchType::FullSearch,
         },
     },
     transposition::TranspositionTable,
@@ -76,6 +77,7 @@ pub fn iterative_deepening<F>(
             MATE,
             &pv,
             true,
+            FullSearch,
             &mut search_context,
         );
 
