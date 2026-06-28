@@ -94,6 +94,11 @@ pub struct SearchCounters {
     pub cutoffs: u64,
     pub available_moves: u64,
     pub first_move_cutoffs: u64,
+    pub reduced_searches: u64,
+    pub reduced_fail_low: u64,
+    pub reduced_fail_high: u64,
+    pub verified_fail_low: u64,
+    pub verified_fail_high: u64,
 }
 
 #[derive(Default, Clone, Copy)]

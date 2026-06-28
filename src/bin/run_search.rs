@@ -109,6 +109,40 @@ fn main() {
                                 / search_stats.search_counters.available_moves as f64,
                         ));
                         println!();
+                        println!("LMR:");
+                        stat("Reduced", format!(
+                            "{:>6}",
+                            fmt_numbers(search_stats.search_counters.reduced_searches),
+                        ));
+                        stat("Fail Low", format!(
+                            "{:>6} ({:>6.2}%)",
+                            fmt_numbers(search_stats.search_counters.reduced_fail_low),
+                            search_stats.search_counters.reduced_fail_low as f64
+                                / search_stats.search_counters.reduced_searches.max(1) as f64
+                                * 100.0
+                        ));
+                        stat("Fail High", format!(
+                            "{:>6} ({:>6.2}%)",
+                            fmt_numbers(search_stats.search_counters.reduced_fail_high),
+                            search_stats.search_counters.reduced_fail_high as f64
+                                / search_stats.search_counters.reduced_searches.max(1) as f64
+                                * 100.0
+                        ));
+                        stat("Verify Low", format!(
+                            "{:>6} ({:>6.2}%)",
+                            fmt_numbers(search_stats.search_counters.verified_fail_low),
+                            search_stats.search_counters.verified_fail_low as f64
+                                / search_stats.search_counters.reduced_fail_high.max(1) as f64
+                                * 100.0
+                        ));
+                        stat("Verify High", format!(
+                            "{:>6} ({:>6.2}%)",
+                            fmt_numbers(search_stats.search_counters.verified_fail_high),
+                            search_stats.search_counters.verified_fail_high as f64
+                                / search_stats.search_counters.reduced_fail_high.max(1) as f64
+                                * 100.0
+                        ));
+                        println!();
                     }
                     SearchFinished { .. } => {
                         cmd_sender.send(EngineCommand::Quit).unwrap();
