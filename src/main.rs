@@ -194,7 +194,7 @@ fn main() {
                         info.nodes,
                         info.nps,
                         info.hashfull,
-                        info.time,
+                        info.time.as_millis(),
                         info.best_line
                             .unwrap_or_default()
                             .into_iter()

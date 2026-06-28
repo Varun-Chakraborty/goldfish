@@ -13,18 +13,11 @@ use std::{
 };
 
 use crate::{
-    EngineEvent,
-    game::{GameState, MoveGenMode},
-    history::HistoryHeuristic,
-    search::{
-        negamax::negamax,
-        quiescence::quiescence,
-        search_types::{
-            EngineLimits, IterationInfo, PVTable, Score, SearchContext, SearchStats,
-            SearchType::FullSearch,
+    EngineEvent, game::{GameState, MoveGenMode}, history::HistoryHeuristic, search::{
+        negamax::negamax, quiescence::quiescence, search_types::{
+            EngineLimits, IterationInfo, PVTable, Score, SearchContext, SearchCounters, SearchStats, SearchType::FullSearch,
         },
-    },
-    transposition::TranspositionTable,
+    }, transposition::TranspositionTable,
 };
 
 pub const MATE: i32 = 32000;
@@ -51,14 +44,14 @@ pub fn iterative_deepening<F>(
     let mut depth = 1;
 
     let start = Instant::now();
-    let mut nodes = 0;
 
-    let mut search_context = SearchContext {
+    let mut ctx = SearchContext {
         stopped: false,
         stop,
         ponderhit,
         tt,
         search_stats: SearchStats::new(),
+        qsearch_stats: SearchCounters::default(),
         pv_table: &mut pv_table,
         history_heuristics,
         start_time: start,
@@ -66,8 +59,7 @@ pub fn iterative_deepening<F>(
         node_limit: limits.nodes,
     };
     loop {
-        search_context.stopped = false;
-        search_context.search_stats = SearchStats::new();
+        ctx.stopped = false;
 
         let result = negamax(
             gs,
@@ -78,40 +70,39 @@ pub fn iterative_deepening<F>(
             &pv,
             true,
             FullSearch,
-            &mut search_context,
+            &mut ctx,
         );
 
-        if search_context.stopped || stop.load(Ordering::Relaxed) {
+        if ctx.stopped || stop.load(Ordering::Relaxed) {
             break;
         }
 
-        pv = search_context.pv_table.table[0][..search_context.pv_table.length[0] as usize]
+        pv = ctx.pv_table.table[0][..ctx.pv_table.length[0] as usize]
             .iter()
             .copied()
             .collect();
 
         let duration = start.elapsed();
-        let tt_stats = search_context.tt.stats();
-
-        nodes += search_context.search_stats.search_counters.nodes;
+        let tt_stats = ctx.tt.stats();
 
         callback(EngineEvent::IterationInfo(IterationInfo {
             depth,
             seldepth: depth,
             score: score(result.score),
             raw_score: result.score,
-            nodes,
-            nps: (nodes as f64 / duration.as_secs_f64()).ceil() as u64,
-            time: duration.as_millis(),
+            nodes: ctx.search_stats.search_counters.nodes,
+            nps: (ctx.search_stats.search_counters.nodes as f64 / duration.as_secs_f64()).ceil() as u64,
+            time: duration,
             best_line: pv.clone(),
-            hashfull: tt_stats.hashfull as u64,
+            hashfull: tt_stats.hashfull,
+            tt_stats: mem::take(tt_stats),
+            qsearch_stats: Some(ctx.qsearch_stats),
             search_stats: Some(SearchStats {
-                tt_stats: mem::take(tt_stats),
-                branching_factor: (search_context.search_stats.search_counters.nodes as f64)
+                branching_factor: (ctx.search_stats.search_counters.nodes as f64)
                     .powf(1f64 / depth as f64),
-                delta: search_context.search_stats.search_counters.nodes as i64
+                delta: ctx.search_stats.search_counters.nodes as i64
                     - nodes_in_last_iteration as i64,
-                search_counters: search_context.search_stats.search_counters,
+                search_counters: ctx.search_stats.search_counters,
             }),
         }));
 
@@ -119,7 +110,7 @@ pub fn iterative_deepening<F>(
         if limits.depth.is_some_and(|max_depth| depth > max_depth) {
             break;
         }
-        nodes_in_last_iteration = search_context.search_stats.search_counters.nodes;
+        nodes_in_last_iteration = ctx.search_stats.search_counters.nodes;
     }
 
     let best_move = pv.as_ref().and_then(|pv| pv.get(0).copied());

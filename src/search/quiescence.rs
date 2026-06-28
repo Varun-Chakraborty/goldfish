@@ -18,10 +18,10 @@ pub fn quiescence(
     depth: u32,
     mut alpha: i32,
     mut beta: i32,
-    search_context: &mut SearchContext,
+    ctx: &mut SearchContext,
 ) -> i32 {
-    search_context.search_stats.search_counters.qnodes += 1;
-    if let Some(entry) = search_context.tt.probe(gs.zobrist, ply, None) {
+    ctx.qsearch_stats.nodes += 1;
+    if let Some(entry) = ctx.tt.probe(gs.zobrist, ply, None) {
         match entry.bound {
             Bound::Exact => {
                 return entry.score;
@@ -34,7 +34,7 @@ pub fn quiescence(
             }
         }
         if alpha >= beta {
-            search_context.search_stats.search_counters.cutoffs += 1;
+            ctx.qsearch_stats.cutoffs += 1;
             return beta;
         }
     }
@@ -58,7 +58,7 @@ pub fn quiescence(
         };
 
         if stand_pat >= beta {
-            search_context.search_stats.search_counters.cutoffs += 1;
+            ctx.qsearch_stats.cutoffs += 1;
             return beta;
         }
 
@@ -89,31 +89,31 @@ pub fn quiescence(
         gs.turn,
         None,
         None,
-        search_context.history_heuristics,
+        ctx.history_heuristics,
     );
     let total_moves = legal.len();
-    search_context.search_stats.search_counters.available_moves += total_moves as u64;
+    ctx.qsearch_stats.available_moves += total_moves as u64;
 
     let mut score = alpha;
 
     for m in legal {
-        if search_context.should_stop() {
-            search_context.stopped = true;
+        if ctx.should_stop() {
+            ctx.stopped = true;
             return score;
         }
         let undo = gs.make_move(m);
-        let result = -quiescence(gs, ply + 1, depth + 1, -beta, -alpha, search_context);
+        let result = -quiescence(gs, ply + 1, depth + 1, -beta, -alpha, ctx);
         gs.unmake_move(undo);
 
-        if search_context.stopped {
+        if ctx.stopped {
             return score;
         }
 
-        search_context.search_stats.search_counters.examined_moves += 1;
+        ctx.qsearch_stats.examined_moves += 1;
         score = score.max(result);
         alpha = alpha.max(score);
         if alpha >= beta {
-            search_context.search_stats.search_counters.cutoffs += 1;
+            ctx.qsearch_stats.cutoffs += 1;
             break;
         }
     }

@@ -2,8 +2,7 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
-    },
-    time::Instant,
+    }, time::{Duration, Instant},
 };
 
 use crate::{
@@ -36,6 +35,7 @@ pub enum SearchType {
 
 pub struct SearchContext<'a> {
     pub stopped: bool,
+    pub qsearch_stats: SearchCounters,
     pub search_stats: SearchStats,
     pub pv_table: &'a mut PVTable,
     pub tt: &'a mut TranspositionTable,
@@ -50,7 +50,7 @@ pub struct SearchContext<'a> {
 impl<'a> SearchContext<'a> {
     #[inline]
     pub fn should_stop(&self) -> bool {
-        if (self.search_stats.search_counters.nodes + self.search_stats.search_counters.qnodes)
+        if (self.search_stats.search_counters.nodes + self.qsearch_stats.nodes)
             .is_multiple_of(2048)
         {
             return self.stop.load(Ordering::Relaxed);
@@ -78,15 +78,16 @@ pub struct IterationInfo {
     pub raw_score: i32,
     pub best_line: Option<Vec<Move>>,
     pub nodes: u64,
-    pub time: u128,
+    pub time: Duration,
     pub nps: u64,
     pub hashfull: u64,
+    pub qsearch_stats: Option<SearchCounters>,
     pub search_stats: Option<SearchStats>,
+    pub tt_stats: TTStats,
 }
 
 #[derive(Default, Clone, Copy)]
 pub struct SearchCounters {
-    pub qnodes: u64,
     pub nodes: u64,
     pub leaf_nodes: u64,
     pub examined_moves: u64,
@@ -95,12 +96,11 @@ pub struct SearchCounters {
     pub first_move_cutoffs: u64,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 pub struct SearchStats {
     pub search_counters: SearchCounters,
     pub branching_factor: f64,
     pub delta: i64,
-    pub tt_stats: TTStats,
 }
 
 impl SearchStats {

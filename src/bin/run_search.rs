@@ -11,6 +11,24 @@ use goldfish::{
     fmt_pgn_moves,
 };
 
+fn fmt_numbers(n: u64) -> String {
+    match n {
+        0..=99999 => format!("{:.2}k", n as f64 / 1000.0),
+        n => format!("{:.2}M", n as f64 / 1_000_000.0),
+    }
+}
+
+fn fmt_delta(n: i64) -> String {
+    match n {
+        0..=99999 => format!("{:+.2}k", n as f64 / 1000.0),
+        n => format!("{:+.2}M", n as f64 / 1_000_000.0),
+    }
+}
+
+fn stat(name: &str, value: impl std::fmt::Display) {
+    println!("{:<18} : {}", name, value);
+}
+
 fn main() {
     let (cmd_sender, cmd_receiver) = mpsc::channel();
     let (event_sender, event_receiver) = mpsc::channel();
@@ -47,45 +65,50 @@ fn main() {
                         let best_line = info.best_line.as_ref().expect("No best moves");
                         let best_line = fmt_pgn_moves(&gs, best_line).join(", ");
                         let search_stats = info.search_stats.expect("No search stats");
-                        println!(
-                            "d{} score={} {}n ({}n) {:.2}Mn/s leaf={:.2}% qnodes/leaf={:.2} ebf={:.2} mpc={:.2} first_move_cutoffs={} me={:.2} hit={:.2}%\npv: {}",
-                            info.depth,
-                            info.raw_score,
-                            match search_stats.search_counters.nodes {
-                                0..=99999 => format!(
-                                    "{:.2}k",
-                                    search_stats.search_counters.nodes as f64 / 1000.0
-                                ),
-                                n => format!("{:.2}M", n as f64 / 1_000_000.0),
-                            },
-                            match search_stats.delta {
-                                -99_999..=99_999 =>
-                                    format!("{:+.2}k", search_stats.delta as f64 / 1_000.0),
-                                n => format!("{:+.2}M", n as f64 / 1_000_000.0),
-                            },
+                        let qsearch_stats = info.qsearch_stats.expect("No quiescence search stats");
+                        println!("d{} score: {}", info.depth, info.raw_score);
+                        println!("PV: {}", best_line);
+                        println!();
+                        println!("Search:");
+                        stat("Nodes", format!(
+                            "{}n ({}n) @ {:.2}Mn/s",
+                            fmt_numbers(search_stats.search_counters.nodes),
+                            fmt_delta(search_stats.delta),
                             info.nps as f64 / 1_000_000.0,
+                        ));
+                        stat("QNodes", format!(
+                            "{}n @ {:.2}Mn/s",
+                            fmt_numbers(qsearch_stats.nodes),
+                            qsearch_stats.nodes as f64 / info.time.as_secs_f64() / 1_000_000.0,
+                        ));
+                        stat("TT Hit Rate", format!(
+                            "{:.2}%",
+                            info.tt_stats.hits as f64 / info.tt_stats.probes.max(1) as f64 * 100.0,
+                        ));
+                        println!();
+                        println!("Tree:");
+                        stat("Leaf %", format!(
+                            "{:.2}",
                             search_stats.search_counters.leaf_nodes as f64
                                 / search_stats.search_counters.nodes as f64
                                 * 100.0,
-                            search_stats.search_counters.qnodes as f64
-                                / search_stats.search_counters.leaf_nodes as f64,
-                            search_stats.branching_factor,
+                        ));
+                        stat("EBF", format!("{:.2}", search_stats.branching_factor));
+                        stat("MPC", format!(
+                            "{:.2}",
                             search_stats.search_counters.examined_moves as f64
                                 / (search_stats.search_counters.cutoffs).max(1) as f64,
-                            match search_stats.search_counters.first_move_cutoffs {
-                                0..=99999 => format!(
-                                    "{:.2}k",
-                                    search_stats.search_counters.first_move_cutoffs as f64 / 1000.0
-                                ),
-                                n => format!("{:.2}M", n as f64 / 1_000_000.0),
-                            },
+                        ));
+                        stat("1st Cutoff", format!(
+                            "{}",
+                            fmt_numbers(search_stats.search_counters.first_move_cutoffs),
+                        ));
+                        stat("Moves Examined", format!(
+                            "{:.2}",
                             search_stats.search_counters.examined_moves as f64
                                 / search_stats.search_counters.available_moves as f64,
-                            search_stats.tt_stats.hits as f64
-                                / search_stats.tt_stats.probes.max(1) as f64
-                                * 100.0,
-                            best_line,
-                        )
+                        ));
+                        println!();
                     }
                     SearchFinished { .. } => {
                         cmd_sender.send(EngineCommand::Quit).unwrap();
