@@ -2,6 +2,7 @@ use std::num::ParseIntError;
 
 use crate::{
     board::{Board, BoardError},
+    game::Direction::{Horizontal, Knight, LeftDiagonal, RightDiagonal, Vertical},
     types::{CastleSide, CastlingRights, Color, ColorError, Coordinate, Move, PieceType, Square},
     zobrist::{
         compute_hash, get_black_to_move, get_castling_rights, get_en_passant_files, get_piece_sq,
@@ -33,6 +34,33 @@ pub struct Undo {
     move_info: Move,
 }
 
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub enum Direction {
+    Knight,
+    RightDiagonal,
+    LeftDiagonal,
+    Horizontal,
+    Vertical,
+}
+
+pub struct PinMap {
+    pins: [Option<Direction>; 64],
+}
+
+impl PinMap {
+    pub fn new() -> Self {
+        PinMap { pins: [None; 64] }
+    }
+
+    pub fn get(&self, coord: Coordinate) -> Option<Direction> {
+        self.pins[coord.idx()]
+    }
+
+    pub fn set(&mut self, coord: Coordinate, dir: Option<Direction>) {
+        self.pins[coord.idx()] = dir;
+    }
+}
+
 #[derive(Clone)]
 pub struct GameState {
     pub board: Board,
@@ -47,7 +75,7 @@ pub struct GameState {
     material_count: [u8; 10],
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy)]
 pub enum MoveGenMode {
     All,
     CaptureOnly,
@@ -247,54 +275,53 @@ impl GameState {
         }
     }
 
-    pub fn is_attacked(&self, coord: Coordinate, by: Color) -> bool {
+    pub fn lva(&self, coord: Coordinate, by: Color, dir: Option<Direction>) -> Option<Coordinate> {
         let pawn_dir: i8 = if by == Color::White { -1 } else { 1 };
-        for df in [-1i8, 1i8] {
+        if dir.as_ref().is_none_or(|&dir| dir == RightDiagonal) {
+            let df = pawn_dir;
             if let Some(target) = coord.checked_offset(df, pawn_dir) {
                 match self.board.get(target) {
                     Square::Occupied { color, piece }
                         if color == by && piece == PieceType::Pawn =>
                     {
-                        return true;
+                        return Some(target);
                     }
-                    _ => continue,
+                    _ => {}
                 }
             }
         }
 
-        for &(df, dr) in &[
-            (1, 2),
-            (2, 1),
-            (2, -1),
-            (1, -2),
-            (-1, -2),
-            (-2, -1),
-            (-2, 1),
-            (-1, 2),
-        ] {
-            if let Some(target) = coord.checked_offset(df, dr) {
+        if dir.as_ref().is_none_or(|&dir| dir == LeftDiagonal) {
+            let df = -pawn_dir;
+            if let Some(target) = coord.checked_offset(df, pawn_dir) {
                 match self.board.get(target) {
                     Square::Occupied { color, piece }
-                        if color == by && piece == PieceType::Knight =>
+                        if color == by && piece == PieceType::Pawn =>
                     {
-                        return true;
+                        return Some(target);
                     }
-                    _ => continue,
+                    _ => {}
                 }
             }
         }
 
-        for df in -1i8..=1 {
-            for dr in -1i8..=1 {
-                if df == 0 && dr == 0 {
-                    continue;
-                }
+        if dir.as_ref().is_none_or(|&dir| dir == Knight) {
+            for &(df, dr) in &[
+                (1, 2),
+                (2, 1),
+                (2, -1),
+                (1, -2),
+                (-1, -2),
+                (-2, -1),
+                (-2, 1),
+                (-1, 2),
+            ] {
                 if let Some(target) = coord.checked_offset(df, dr) {
                     match self.board.get(target) {
                         Square::Occupied { color, piece }
-                            if color == by && piece == PieceType::King =>
+                            if color == by && piece == PieceType::Knight =>
                         {
-                            return true;
+                            return Some(target);
                         }
                         _ => continue,
                     }
@@ -302,26 +329,22 @@ impl GameState {
             }
         }
 
-        let straight = [(0, 1), (1, 0), (0, -1), (-1, 0)];
-        let diagonal = [(1, 1), (1, -1), (-1, 1), (-1, -1)];
-
-        for &(df, dr) in &straight {
-            let mut c = coord;
-            while let Some(next) = c.checked_offset(df, dr) {
-                c = next;
-                let sq = self.board.get(c);
-                match sq {
-                    Square::Empty => continue,
-                    Square::Occupied { color, piece }
-                        if color == by
-                            && (piece == PieceType::Rook || piece == PieceType::Queen) =>
-                    {
-                        return true;
-                    }
-                    _ => break,
-                }
-            }
-        }
+        let diagonal = match dir.as_ref() {
+            Some(&dir) => match dir {
+                Vertical | Horizontal | Knight => vec![],
+                RightDiagonal => vec![(1, 1), (-1, -1)],
+                LeftDiagonal => vec![(-1, 1), (1, -1)],
+            },
+            None => vec![(1, 1), (1, -1), (-1, 1), (-1, -1)],
+        };
+        let straight = match dir.as_ref() {
+            Some(&dir) => match dir {
+                RightDiagonal | LeftDiagonal | Knight => vec![],
+                Horizontal => vec![(1, 0), (-1, 0)],
+                Vertical => vec![(0, 1), (0, -1)],
+            },
+            None => vec![(0, 1), (1, 0), (0, -1), (-1, 0)],
+        };
 
         for &(df, dr) in &diagonal {
             let mut c = coord;
@@ -330,86 +353,317 @@ impl GameState {
                 let sq = self.board.get(c);
                 match sq {
                     Square::Empty => continue,
-                    Square::Occupied { color, piece }
-                        if color == by
-                            && (piece == PieceType::Bishop || piece == PieceType::Queen) =>
-                    {
-                        return true;
-                    }
-                    _ => break,
+                    Square::Occupied { color, piece } => match piece {
+                        PieceType::Bishop if color == by => return Some(c),
+                        _ => break,
+                    },
                 }
             }
         }
 
-        false
+        for &(df, dr) in &straight {
+            let mut c = coord;
+            while let Some(next) = c.checked_offset(df, dr) {
+                c = next;
+                let sq = self.board.get(c);
+                match sq {
+                    Square::Empty => continue,
+                    Square::Occupied { color, piece } => match piece {
+                        PieceType::Rook if color == by => return Some(c),
+                        _ => break,
+                    },
+                }
+            }
+        }
+
+        for &(df, dr) in straight.iter().chain(diagonal.iter()) {
+            let mut c = coord;
+            while let Some(next) = c.checked_offset(df, dr) {
+                c = next;
+                let sq = self.board.get(c);
+                match sq {
+                    Square::Empty => continue,
+                    Square::Occupied { color, piece } => match piece {
+                        PieceType::Queen if color == by => return Some(c),
+                        _ => break,
+                    },
+                }
+            }
+        }
+
+        let dir = match dir.as_ref() {
+            Some(&dir) => match dir {
+                RightDiagonal => vec![(1, 1), (-1, -1)],
+                LeftDiagonal => vec![(-1, 1), (1, -1)],
+                Horizontal => vec![(1, 0), (-1, 0)],
+                Vertical => vec![(0, 1), (0, -1)],
+                Knight => vec![],
+            },
+            None => vec![
+                (1, 1),
+                (1, -1),
+                (-1, 1),
+                (-1, -1),
+                (0, 1),
+                (0, -1),
+                (1, 0),
+                (-1, 0),
+            ],
+        };
+
+        for (df, dr) in dir {
+            if let Some(target) = coord.checked_offset(df, dr) {
+                match self.board.get(target) {
+                    Square::Occupied { color, piece }
+                        if color == by && piece == PieceType::King =>
+                    {
+                        return Some(target);
+                    }
+                    _ => continue,
+                }
+            }
+        }
+
+        None
     }
 
-    pub fn in_check(&self, color: Color) -> bool {
-        let king = match color {
+    pub fn compute_pins(&self) -> PinMap {
+        let king = match self.turn {
             Color::White => self.kings.0,
             Color::Black => self.kings.1,
         };
-        self.is_attacked(king, color.opponent())
+        let mut pinmap = PinMap::new();
+        let mut candidate_square = None;
+        for direction in [
+            (-1, -1),
+            (-1, 0),
+            (-1, 1),
+            (0, -1),
+            (0, 1),
+            (1, -1),
+            (1, 0),
+            (1, 1),
+        ] {
+            let mut cell = king;
+            while let Some(next) = cell.checked_offset(direction.0, direction.1) {
+                cell = next;
+                match self.board.get(next) {
+                    Square::Empty => continue,
+                    Square::Occupied { color, piece } if color == self.turn => {
+                        if candidate_square.is_none() {
+                            candidate_square = Some(cell);
+                        } else {
+                            break;
+                        }
+                    }
+                    Square::Occupied { piece, .. } => {
+                        if let Some(sq) = candidate_square {
+                            let diagonal = direction.0.abs() == direction.1.abs();
+                            let axis = direction.0.abs() == 0 || direction.1.abs() == 0;
+                            if diagonal && (piece == PieceType::Queen || piece == PieceType::Bishop)
+                            {
+                                pinmap.set(
+                                    sq,
+                                    if direction.0 == direction.1 {
+                                        Some(Direction::RightDiagonal)
+                                    } else {
+                                        Some(Direction::LeftDiagonal)
+                                    },
+                                );
+                            } else if axis
+                                && (piece == PieceType::Queen || piece == PieceType::Rook)
+                            {
+                                pinmap.set(
+                                    sq,
+                                    if direction.0 == 0 {
+                                        Some(Direction::Vertical)
+                                    } else {
+                                        Some(Direction::Horizontal)
+                                    },
+                                );
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+            candidate_square = None;
+        }
+
+        pinmap
     }
 
-    fn pawn_moves(&self, from: Coordinate, color: Color, moves: &mut Vec<Move>) {
+    pub fn checks(&self, to: Color) -> Vec<(Coordinate, Direction)> {
+        let king = match to {
+            Color::White => self.kings.0,
+            Color::Black => self.kings.1,
+        };
+
+        let directions = [
+            Direction::Knight,
+            Direction::Horizontal,
+            Direction::Vertical,
+            Direction::LeftDiagonal,
+            Direction::RightDiagonal,
+        ];
+
+        let mut checks = vec![];
+
+        for d in directions {
+            if let Some(attacker) = self.lva(king, to.opponent(), Some(d)) {
+                checks.push((attacker, d));
+            }
+            if checks.len() == 2 {
+                break;
+            }
+        }
+
+        checks
+    }
+
+    pub fn in_check(&self, color: Color) -> bool {
+        self.checks(color).len() > 0
+    }
+
+    fn pawn_moves(
+        &mut self,
+        from: Coordinate,
+        moves: &mut Vec<Move>,
+        target_squares: &Option<Vec<Coordinate>>,
+        pin_map: &PinMap,
+        move_gen_mode: MoveGenMode,
+    ) {
+        let color = self.turn;
         let (dir, start_rank, promo_rank) = match color {
             Color::White => (1i8, 1u8, 7u8),
             Color::Black => (-1i8, 6u8, 0u8),
         };
 
-        if let Some(to) = from.checked_offset(0, dir)
-            && self.board.get(to) == Square::Empty
-        {
-            if to.rank() == promo_rank {
-                for &p in &[
-                    PieceType::Queen,
-                    PieceType::Rook,
-                    PieceType::Bishop,
-                    PieceType::Knight,
-                ] {
-                    moves.push(Move::new_promotion(from, to, p));
-                }
-            } else {
-                moves.push(Move::new(from, to, PieceType::Pawn));
-            }
+        let pinned = pin_map.get(from);
 
-            if from.rank() == start_rank
-                && let Some(to2) = from.checked_offset(0, 2 * dir)
-                && self.board.get(to2) == Square::Empty
+        if pinned.is_none_or(|dir| dir == Vertical) {
+            if let Some(to) = from.checked_offset(0, dir)
+                && self.board.get(to) == Square::Empty
             {
-                moves.push(Move::new(from, to2, PieceType::Pawn));
+                if target_squares
+                    .as_ref()
+                    .is_none_or(|sqrs| sqrs.contains(&to))
+                {
+                    if to.rank() == promo_rank {
+                        for &p in &[
+                            PieceType::Queen,
+                            PieceType::Rook,
+                            PieceType::Bishop,
+                            PieceType::Knight,
+                        ] {
+                            moves.push(Move::new_promotion(from, to, p));
+                        }
+                    } else {
+                        moves.push(Move::new(from, to, PieceType::Pawn));
+                    }
+                }
+                if from.rank() == start_rank
+                    && let Some(to2) = from.checked_offset(0, 2 * dir)
+                    && self.board.get(to2) == Square::Empty
+                {
+                    if target_squares
+                        .as_ref()
+                        .is_none_or(|sqrs| sqrs.contains(&to2))
+                    {
+                        moves.push(Move::new(from, to2, PieceType::Pawn));
+                    }
+                }
             }
         }
 
-        for df in [-1i8, 1i8] {
+        if pinned.is_none_or(|dir| dir == RightDiagonal) {
+            let df = dir;
             if let Some(to) = from.checked_offset(df, dir) {
-                match self.board.get(to) {
-                    Square::Occupied { color: c, piece } if c != color => {
-                        if to.rank() == promo_rank {
-                            for &p in &[
-                                PieceType::Queen,
-                                PieceType::Rook,
-                                PieceType::Bishop,
-                                PieceType::Knight,
-                            ] {
-                                moves.push(Move::new_promotion_and_capture(from, to, p, piece));
+                if target_squares
+                    .as_ref()
+                    .is_none_or(|sqrs| sqrs.contains(&to))
+                {
+                    match self.board.get(to) {
+                        Square::Occupied { color: c, piece } if c != color => {
+                            if to.rank() == promo_rank {
+                                for &p in &[
+                                    PieceType::Queen,
+                                    PieceType::Rook,
+                                    PieceType::Bishop,
+                                    PieceType::Knight,
+                                ] {
+                                    moves.push(Move::new_promotion_and_capture(from, to, p, piece));
+                                }
+                            } else {
+                                moves.push(Move::new_capture(from, to, PieceType::Pawn, piece));
                             }
-                        } else {
-                            moves.push(Move::new_capture(from, to, PieceType::Pawn, piece));
                         }
+                        _ => {}
                     }
-                    _ => {}
-                }
 
-                if self.en_passant == Some(to) {
-                    moves.push(Move::new_en_passant(from, to));
+                    if self.en_passant == Some(to) {
+                        let m = Move::new_en_passant(from, to);
+                        let undo = self.make_move(m);
+                        if !self.in_check(color) {
+                            moves.push(m);
+                        }
+                        self.unmake_move(undo);
+                    }
+                }
+            }
+        }
+
+        if pinned.is_none_or(|dir| dir == LeftDiagonal) {
+            let df = -dir;
+            if let Some(to) = from.checked_offset(df, dir) {
+                if target_squares
+                    .as_ref()
+                    .is_none_or(|sqrs| sqrs.contains(&to))
+                {
+                    match self.board.get(to) {
+                        Square::Occupied { color: c, piece } if c != color => {
+                            if to.rank() == promo_rank {
+                                for &p in &[
+                                    PieceType::Queen,
+                                    PieceType::Rook,
+                                    PieceType::Bishop,
+                                    PieceType::Knight,
+                                ] {
+                                    moves.push(Move::new_promotion_and_capture(from, to, p, piece));
+                                }
+                            } else {
+                                moves.push(Move::new_capture(from, to, PieceType::Pawn, piece));
+                            }
+                        }
+                        _ => {}
+                    }
+
+                    if self.en_passant == Some(to) {
+                        let m = Move::new_en_passant(from, to);
+                        let undo = self.make_move(m);
+                        if !self.in_check(color) {
+                            moves.push(m);
+                        }
+                        self.unmake_move(undo);
+                    }
                 }
             }
         }
     }
 
-    fn knight_moves(&self, from: Coordinate, color: Color, moves: &mut Vec<Move>) {
+    fn knight_moves(
+        &self,
+        from: Coordinate,
+        moves: &mut Vec<Move>,
+        target_squares: &Option<Vec<Coordinate>>,
+        pin_map: &PinMap,
+        move_gen_mode: MoveGenMode,
+    ) {
+        let color = self.turn;
+        let pinned = pin_map.get(from);
+        if pinned.is_some() {
+            return;
+        }
         let offsets = [
             (1, 2),
             (2, 1),
@@ -422,6 +676,12 @@ impl GameState {
         ];
         for (df, dr) in &offsets {
             if let Some(to) = from.checked_offset(*df, *dr) {
+                if target_squares
+                    .as_ref()
+                    .is_some_and(|sqrs| !sqrs.contains(&to))
+                {
+                    continue;
+                }
                 match self.board.get(to) {
                     Square::Occupied { color: c, .. } if c == color => continue,
                     Square::Occupied { piece, .. } => {
@@ -436,62 +696,123 @@ impl GameState {
     fn sliding_moves(
         &self,
         from: Coordinate,
-        color: Color,
         piece: PieceType,
         moves: &mut Vec<Move>,
+        target_squares: &Option<Vec<Coordinate>>,
+        pin_map: &PinMap,
+        move_gen_mode: MoveGenMode,
     ) {
-        static BISHOP_DIRS: &[(i8, i8)] = &[(1, 1), (1, -1), (-1, 1), (-1, -1)];
-        static ROOK_DIRS: &[(i8, i8)] = &[(0, 1), (1, 0), (0, -1), (-1, 0)];
-        static QUEEN_DIRS: &[(i8, i8)] = &[
-            (0, 1),
-            (1, 0),
-            (0, -1),
-            (-1, 0),
-            (1, 1),
-            (1, -1),
-            (-1, 1),
-            (-1, -1),
-        ];
-
+        let color = self.turn;
+        let pinned = pin_map.get(from);
         let directions = match piece {
-            PieceType::Bishop => BISHOP_DIRS,
-            PieceType::Rook => ROOK_DIRS,
-            PieceType::Queen => QUEEN_DIRS,
+            PieceType::Bishop => match pinned {
+                None => vec![(1, 1), (1, -1), (-1, 1), (-1, -1)],
+                Some(dir) => match dir {
+                    RightDiagonal => vec![(1, 1), (-1, -1)],
+                    LeftDiagonal => vec![(1, -1), (-1, 1)],
+                    _ => vec![],
+                },
+            },
+            PieceType::Rook => match pinned {
+                None => vec![(0, 1), (1, 0), (0, -1), (-1, 0)],
+                Some(dir) => match dir {
+                    Horizontal => vec![(0, 1), (0, -1)],
+                    Vertical => vec![(1, 0), (-1, 0)],
+                    _ => vec![],
+                },
+            },
+            PieceType::Queen => match pinned {
+                None => vec![
+                    (0, 1),
+                    (1, 0),
+                    (0, -1),
+                    (-1, 0),
+                    (1, 1),
+                    (1, -1),
+                    (-1, 1),
+                    (-1, -1),
+                ],
+                Some(dir) => match dir {
+                    RightDiagonal => vec![(1, 1), (-1, -1)],
+                    LeftDiagonal => vec![(1, -1), (-1, 1)],
+                    Horizontal => vec![(0, 1), (0, -1)],
+                    Vertical => vec![(1, 0), (-1, 0)],
+                    _ => vec![],
+                },
+            },
             _ => unreachable!(),
         };
 
-        for &(df, dr) in directions {
+        for (df, dr) in directions {
             let mut cur = from;
             while let Some(to) = cur.checked_offset(df, dr) {
                 cur = to;
                 match self.board.get(cur) {
-                    Square::Empty => moves.push(Move::new(from, cur, piece)),
-                    Square::Occupied {
-                        color: c,
-                        piece: captured,
-                    } if c != color => {
-                        moves.push(Move::new_capture(from, cur, piece, captured));
+                    Square::Occupied { color: c, .. } if c == color => {
                         break;
                     }
-                    _ => break,
+                    sq => {
+                        if target_squares
+                            .as_ref()
+                            .is_some_and(|sqrs| !sqrs.contains(&to))
+                        {
+                            continue;
+                        }
+                        match sq {
+                            Square::Empty => moves.push(Move::new(from, cur, piece)),
+                            Square::Occupied {
+                                piece: captured, ..
+                            } => {
+                                moves.push(Move::new_capture(from, cur, piece, captured));
+                                break;
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
-    fn king_moves(&self, from: Coordinate, color: Color, moves: &mut Vec<Move>) {
+    fn king_moves(
+        &self,
+        from: Coordinate,
+        moves: &mut Vec<Move>,
+        checks: &Vec<(Coordinate, Direction)>,
+        move_gen_mode: MoveGenMode,
+    ) {
+        let color = self.turn;
         for df in -1i8..=1 {
             for dr in -1i8..=1 {
                 if df == 0 && dr == 0 {
                     continue;
                 }
                 if let Some(to) = from.checked_offset(df, dr) {
+                    let prohibited = checks.iter().any(|(c, _)| c == &to)
+                        || df == dr && checks.iter().any(|(_, d)| d == &Direction::RightDiagonal)
+                        || df == -dr && checks.iter().any(|(_, d)| d == &Direction::LeftDiagonal)
+                        || df == 0 && checks.iter().any(|(_, d)| d == &Direction::Vertical)
+                        || dr == 0 && checks.iter().any(|(_, d)| d == &Direction::Horizontal);
+                    
+                    if prohibited {
+                        continue;
+                    }
+
                     match self.board.get(to) {
                         Square::Occupied { color: c, .. } if c == color => continue,
                         Square::Occupied { piece, .. } => {
+                            let is_attacked = self.lva(to, color.opponent(), None).is_some();
+                            if is_attacked {
+                                continue;
+                            }
                             moves.push(Move::new_capture(from, to, PieceType::King, piece))
                         }
-                        _ => moves.push(Move::new(from, to, PieceType::King)),
+                        _ => {
+                            let is_attacked = self.lva(to, color.opponent(), None).is_some();
+                            if is_attacked {
+                                continue;
+                            }
+                            moves.push(Move::new(from, to, PieceType::King))
+                        }
                     }
                 }
             }
@@ -517,9 +838,15 @@ impl GameState {
                 && between_empty
                     .iter()
                     .all(|&c| self.board.get(c) == Square::Empty)
-                && !self.is_attacked(Coordinate::new_coordinate(4, rank), color.opponent())
-                && !self.is_attacked(Coordinate::new_coordinate(5, rank), color.opponent())
-                && !self.is_attacked(Coordinate::new_coordinate(6, rank), color.opponent())
+                && !self
+                    .lva(Coordinate::new_coordinate(4, rank), color.opponent(), None)
+                    .is_some()
+                && !self
+                    .lva(Coordinate::new_coordinate(5, rank), color.opponent(), None)
+                    .is_some()
+                && !self
+                    .lva(Coordinate::new_coordinate(6, rank), color.opponent(), None)
+                    .is_some()
             {
                 moves.push(Move::new_castle(
                     from,
@@ -545,9 +872,15 @@ impl GameState {
                 && between_empty
                     .iter()
                     .all(|&c| self.board.get(c) == Square::Empty)
-                && !self.is_attacked(Coordinate::new_coordinate(4, rank), color.opponent())
-                && !self.is_attacked(Coordinate::new_coordinate(3, rank), color.opponent())
-                && !self.is_attacked(Coordinate::new_coordinate(2, rank), color.opponent())
+                && !self
+                    .lva(Coordinate::new_coordinate(4, rank), color.opponent(), None)
+                    .is_some()
+                && !self
+                    .lva(Coordinate::new_coordinate(3, rank), color.opponent(), None)
+                    .is_some()
+                && !self
+                    .lva(Coordinate::new_coordinate(2, rank), color.opponent(), None)
+                    .is_some()
             {
                 moves.push(Move::new_castle(
                     from,
@@ -560,7 +893,49 @@ impl GameState {
 
     pub fn legal_moves(&mut self, move_gen_mode: MoveGenMode) -> Vec<Move> {
         let us = self.turn;
-        let mut moves = Vec::with_capacity(64);
+        let mut legal_moves = Vec::with_capacity(70);
+        let checks = self.checks(us);
+        let mut target_squares = None;
+
+        if checks.len() > 1 {
+            let king = match us {
+                Color::White => self.kings.0,
+                Color::Black => self.kings.1,
+            };
+            self.king_moves(king, &mut legal_moves, &checks, move_gen_mode);
+            return legal_moves;
+        } else if checks.len() == 1 {
+            let direction = checks[0].1;
+            match direction {
+                Direction::Knight => {}
+                _ => {
+                    let mut targets = vec![checks[0].0];
+
+                    let king = match us {
+                        Color::White => self.kings.0,
+                        Color::Black => self.kings.1,
+                    };
+
+                    let df = checks[0].0.file() as i8 - king.file() as i8;
+                    let dr = checks[0].0.rank() as i8 - king.rank() as i8;
+
+                    let dr = dr.signum();
+                    let df = df.signum();
+
+                    let mut cell = king;
+                    while let Some(next_cell) = cell.checked_offset(df, dr) {
+                        cell = next_cell;
+                        match self.board.get(next_cell) {
+                            Square::Empty => targets.push(next_cell),
+                            _ => break,
+                        }
+                    }
+                    target_squares = Some(targets);
+                }
+            }
+        }
+
+        let pin_map = self.compute_pins();
 
         for i in 0..64 {
             let from = Coordinate::from_idx(i);
@@ -571,36 +946,30 @@ impl GameState {
             };
 
             match piece {
-                PieceType::Pawn => self.pawn_moves(from, us, &mut moves),
-                PieceType::Knight => self.knight_moves(from, us, &mut moves),
-                PieceType::King => self.king_moves(from, us, &mut moves),
-                piece => self.sliding_moves(from, us, piece, &mut moves),
+                PieceType::King => self.king_moves(from, &mut legal_moves, &checks, move_gen_mode),
+                PieceType::Pawn => self.pawn_moves(
+                    from,
+                    &mut legal_moves,
+                    &target_squares,
+                    &pin_map,
+                    move_gen_mode,
+                ),
+                PieceType::Knight => self.knight_moves(
+                    from,
+                    &mut legal_moves,
+                    &target_squares,
+                    &pin_map,
+                    move_gen_mode,
+                ),
+                piece => self.sliding_moves(
+                    from,
+                    piece,
+                    &mut legal_moves,
+                    &target_squares,
+                    &pin_map,
+                    move_gen_mode,
+                ),
             }
-        }
-
-        let mut legal_moves = Vec::with_capacity(64);
-
-        for m in moves {
-            if move_gen_mode == MoveGenMode::CaptureOnly && m.captured.is_none() {
-                continue;
-            }
-
-            if move_gen_mode == MoveGenMode::CapturesAndChecks
-                && (m.captured.is_none() && m.promotion.is_none() && !m.en_passant)
-            {
-                let undo = self.make_move(m);
-                if !self.in_check(us) && self.in_check(us.opponent()) {
-                    legal_moves.push(m);
-                }
-                self.unmake_move(undo);
-                continue;
-            }
-
-            let undo = self.make_move(m);
-            if !self.in_check(us) {
-                legal_moves.push(m);
-            }
-            self.unmake_move(undo);
         }
 
         legal_moves
@@ -965,7 +1334,7 @@ impl GameState {
     pub fn representation(&self) -> String {
         let mut repr = String::new();
         for i in (0..8).rev() {
-            repr += &format!("{} ", 8 - i);
+            repr += &format!("{} ", i + 1);
             for j in 0..8 {
                 repr += &format!(
                     "{}",
@@ -1000,10 +1369,14 @@ impl GameState {
 #[cfg(test)]
 mod tests {
     use crate::{
-        game::GameState,
+        game::{
+            Direction::{Horizontal, LeftDiagonal, RightDiagonal, Vertical},
+            GameState,
+        },
         notation::parse_algebraic,
         types::{
             Color::{Black, White},
+            Coordinate,
             PieceType::{Bishop, Knight, Pawn, Queen, Rook},
         },
     };
@@ -1235,5 +1608,41 @@ mod tests {
         assert_eq!(material_count[gs.material_idx(Knight, Black)], 0);
         assert_eq!(material_count[gs.material_idx(Pawn, White)], 1);
         assert_eq!(material_count[gs.material_idx(Pawn, Black)], 1);
+    }
+
+    #[test]
+    fn test_pinned_direction1() {
+        let gs = GameState::from_fen("7k/8/8/4r3/8/8/8/QK6 b - - 0 1").unwrap();
+        let pin_map = gs.compute_pins();
+        let pinned = pin_map.get(Coordinate::new_coordinate(4, 4));
+        println!("{:?}", pinned);
+        assert!(pinned.is_some_and(|dir| dir == RightDiagonal));
+    }
+
+    #[test]
+    fn test_pinned_direction2() {
+        let gs = GameState::from_fen("k7/8/8/3r4/8/8/8/6KQ b - - 0 1").unwrap();
+        let pin_map = gs.compute_pins();
+        let pinned = pin_map.get(Coordinate::new_coordinate(3, 4));
+        println!("{:?}", pinned);
+        assert!(pinned.is_some_and(|dir| dir == LeftDiagonal));
+    }
+
+    #[test]
+    fn test_pinned_direction3() {
+        let gs = GameState::from_fen("7k/8/8/7r/8/8/8/6KQ b - - 0 1").unwrap();
+        let pin_map = gs.compute_pins();
+        let pinned = pin_map.get(Coordinate::new_coordinate(7, 4));
+        println!("{:?}", pinned);
+        assert!(pinned.is_some_and(|dir| dir == Vertical));
+    }
+
+    #[test]
+    fn test_pinned_direction4() {
+        let gs = GameState::from_fen("KQ3r1k/8/8/8/8/8/8/8 b - - 0 1").unwrap();
+        let pin_map = gs.compute_pins();
+        let pinned = pin_map.get(Coordinate::new_coordinate(5, 7));
+        println!("{:?}", pinned);
+        assert!(pinned.is_some_and(|dir| dir == Horizontal));
     }
 }
