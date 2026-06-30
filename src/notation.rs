@@ -153,5 +153,5 @@ pub fn parse_algebraic(gs: &mut GameState, s: &str) -> Option<Move> {
         "O-O-O" | "o-o-o" | "0-0-0" => "O-O-O",
         _ => s,
     };
-    parse_san(gs, s).or_else(|| parse_coordinate(gs, s))
+    parse_coordinate(gs, s).or_else(|| parse_san(gs, s))
 }

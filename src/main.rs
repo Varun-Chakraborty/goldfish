@@ -79,9 +79,7 @@ fn main() {
                             let mut moves = None;
                             match args.next() {
                                 Some("startpos") => {
-                                    fen =
-                                        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-                                            .to_string();
+                                    fen = "startpos".to_string();
                                 }
                                 Some("fen") => {
                                     fen = args.by_ref().take(6).collect::<Vec<_>>().join(" ");
@@ -103,45 +101,118 @@ fn main() {
                             stop.store(false, Ordering::Relaxed);
                             ponderhit.store(false, Ordering::Relaxed);
                             let mut limits = EngineLimits::default();
+                            let mut perft_depth = 0;
+                            let mut go_type = "none";
                             while let Some(arg) = args.next() {
                                 match arg {
                                     "infinite" => {
                                         limits = EngineLimits::default();
+                                        go_type = "search";
                                         break;
                                     }
                                     "depth" => match args.next().and_then(|d| d.parse().ok()) {
-                                        Some(depth) => limits.depth = Some(depth),
-                                        None => println!("Depth not specified"),
+                                        Some(depth) => {
+                                            limits.depth = Some(depth);
+                                            go_type = "search";
+                                        }
+                                        None => {
+                                            println!("Depth not specified");
+                                            go_type = "none";
+                                            break;
+                                        }
                                     },
                                     "wtime" => match args.next().and_then(|d| d.parse().ok()) {
-                                        Some(depth) => limits.wtime = Some(depth),
-                                        None => println!("wtime not specified"),
+                                        Some(depth) => {
+                                            limits.wtime = Some(depth);
+                                            go_type = "search";
+                                        }
+                                        None => {
+                                            println!("wtime not specified");
+                                            go_type = "none";
+                                            break;
+                                        }
                                     },
                                     "btime" => match args.next().and_then(|d| d.parse().ok()) {
-                                        Some(depth) => limits.btime = Some(depth),
-                                        None => println!("btime not specified"),
+                                        Some(depth) => {
+                                            limits.btime = Some(depth);
+                                            go_type = "search";
+                                        }
+                                        None => {
+                                            println!("btime not specified");
+                                            go_type = "none";
+                                            break;
+                                        }
                                     },
                                     "winc" => match args.next().and_then(|d| d.parse().ok()) {
-                                        Some(depth) => limits.winc = Some(depth),
-                                        None => println!("winc not specified"),
+                                        Some(depth) => {
+                                            limits.winc = Some(depth);
+                                            go_type = "search";
+                                        }
+                                        None => {
+                                            println!("winc not specified");
+                                            go_type = "none";
+                                            break;
+                                        }
                                     },
                                     "binc" => match args.next().and_then(|d| d.parse().ok()) {
-                                        Some(depth) => limits.binc = Some(depth),
-                                        None => println!("binc not specified"),
+                                        Some(depth) => {
+                                            limits.binc = Some(depth);
+                                            go_type = "search";
+                                        }
+                                        None => {
+                                            println!("binc not specified");
+                                            go_type = "none";
+                                            break;
+                                        }
                                     },
                                     "movestogo" => match args.next().and_then(|d| d.parse().ok()) {
-                                        Some(depth) => limits.movestogo = Some(depth),
-                                        None => println!("movestogo not specified"),
+                                        Some(depth) => {
+                                            limits.movestogo = Some(depth);
+                                            go_type = "search";
+                                        }
+                                        None => {
+                                            println!("movestogo not specified");
+                                            go_type = "none";
+                                            break;
+                                        }
                                     },
                                     "movetime" => match args.next().and_then(|d| d.parse().ok()) {
-                                        Some(depth) => limits.movetime = Some(depth),
-                                        None => println!("movetime not specified"),
+                                        Some(depth) => {
+                                            limits.movetime = Some(depth);
+                                            go_type = "search";
+                                        }
+                                        None => {
+                                            println!("movetime not specified");
+                                            go_type = "none";
+                                            break;
+                                        }
                                     },
                                     "nodes" => match args.next().and_then(|d| d.parse().ok()) {
-                                        Some(depth) => limits.nodes = Some(depth),
-                                        None => println!("nodes not specified"),
+                                        Some(depth) => {
+                                            limits.nodes = Some(depth);
+                                            go_type = "search";
+                                        }
+                                        None => {
+                                            println!("nodes not specified");
+                                            go_type = "none";
+                                            break;
+                                        }
                                     },
-                                    "ponder" => limits.ponder = true,
+                                    "ponder" => {
+                                        limits.ponder = true;
+                                        go_type = "search";
+                                    }
+                                    "perft" => match args.next().and_then(|d| d.parse().ok()) {
+                                        Some(depth) => {
+                                            perft_depth = depth;
+                                            go_type = "perft";
+                                        }
+                                        None => {
+                                            println!("Depth not specified");
+                                            go_type = "none";
+                                            break;
+                                        }
+                                    },
                                     _ => {
                                         eprintln!(
                                             "Unsure what you mean. Type 'uci' to get started."
@@ -150,8 +221,21 @@ fn main() {
                                     }
                                 }
                             }
-                            if let Err(e) = cmd_sender.send(EngineCommand::Start { limits }) {
-                                println!("{e}");
+                            match go_type {
+                                "search" => {
+                                    if let Err(e) = cmd_sender.send(EngineCommand::Start { limits })
+                                    {
+                                        println!("{e}");
+                                    }
+                                }
+                                "perft" => {
+                                    if let Err(e) =
+                                        cmd_sender.send(EngineCommand::Perft { depth: perft_depth })
+                                    {
+                                        println!("{e}");
+                                    }
+                                }
+                                _ => (),
                             }
                         }
                         Some("stop") => stop.store(true, Ordering::Relaxed),
@@ -209,7 +293,7 @@ fn main() {
                         (Some(m), None) => println!("bestmove {}", m.to_algebraic()),
                         _ => println!("bestmove resign"),
                     },
-                    Debug { fen } => println!("fen: {fen}"),
+                    Debug { string } => println!("{string}"),
                 },
             },
             Err(e) => println!("{e}"),
