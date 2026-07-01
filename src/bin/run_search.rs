@@ -70,78 +70,115 @@ fn main() {
                         println!("PV: {}", best_line);
                         println!();
                         println!("Search:");
-                        stat("Nodes", format!(
-                            "{}n ({}n) @ {:.2}Mn/s",
-                            fmt_numbers(search_stats.search_counters.nodes),
-                            fmt_delta(search_stats.delta),
-                            search_stats.search_counters.nodes as f64 / info.time.as_secs_f64() / 1_000_000.0,
-                        ));
-                        stat("QNodes", format!(
-                            "{}n @ {:.2}Mn/s",
-                            fmt_numbers(qsearch_stats.nodes),
-                            qsearch_stats.nodes as f64 / info.time.as_secs_f64() / 1_000_000.0,
-                        ));
-                        stat("TT Hit Rate", format!(
-                            "{:.2}%",
-                            info.tt_stats.hits as f64 / info.tt_stats.probes.max(1) as f64 * 100.0,
-                        ));
+                        stat(
+                            "Nodes",
+                            format!(
+                                "{}n ({}n) @ {:.2}Mn/s",
+                                fmt_numbers(search_stats.search_counters.nodes),
+                                fmt_delta(search_stats.delta),
+                                search_stats.search_counters.nodes as f64 / info.time.as_secs_f64() / 1_000_000.0,
+                            ),
+                        );
+                        stat(
+                            "QNodes",
+                            format!(
+                                "{}n @ {:.2}Mn/s",
+                                fmt_numbers(qsearch_stats.nodes),
+                                qsearch_stats.nodes as f64 / info.time.as_secs_f64() / 1_000_000.0,
+                            ),
+                        );
+                        stat(
+                            "TT Hit Rate",
+                            format!(
+                                "{:.2}%",
+                                info.tt_stats.hits as f64 / info.tt_stats.probes.max(1) as f64
+                                    * 100.0,
+                            ),
+                        );
                         println!();
                         println!("Tree:");
-                        stat("Leaf %", format!(
-                            "{:.2}",
-                            search_stats.search_counters.leaf_nodes as f64
-                                / search_stats.search_counters.nodes as f64
-                                * 100.0,
-                        ));
+                        stat(
+                            "Leaf %",
+                            format!(
+                                "{:.2}",
+                                search_stats.search_counters.leaf_nodes as f64
+                                    / search_stats.search_counters.nodes as f64
+                                    * 100.0,
+                            ),
+                        );
                         stat("EBF", format!("{:.2}", search_stats.branching_factor));
-                        stat("MPC", format!(
-                            "{:.2}",
-                            search_stats.search_counters.examined_moves as f64
-                                / (search_stats.search_counters.cutoffs).max(1) as f64,
-                        ));
-                        stat("1st Cutoff", format!(
-                            "{}",
-                            fmt_numbers(search_stats.search_counters.first_move_cutoffs),
-                        ));
-                        stat("Moves Examined", format!(
-                            "{:.2}",
-                            search_stats.search_counters.examined_moves as f64
-                                / search_stats.search_counters.available_moves as f64,
-                        ));
+                        stat(
+                            "MPC",
+                            format!(
+                                "{:.2}",
+                                search_stats.search_counters.examined_moves as f64
+                                    / (search_stats.search_counters.cutoffs).max(1) as f64,
+                            ),
+                        );
+                        stat(
+                            "1st Cutoff",
+                            format!(
+                                "{}",
+                                fmt_numbers(search_stats.search_counters.first_move_cutoffs),
+                            ),
+                        );
+                        stat(
+                            "Moves Examined",
+                            format!(
+                                "{:.2}",
+                                search_stats.search_counters.examined_moves as f64
+                                    / search_stats.search_counters.available_moves as f64,
+                            ),
+                        );
                         println!();
                         println!("LMR:");
-                        stat("Reduced", format!(
-                            "{:>6}",
-                            fmt_numbers(search_stats.search_counters.reduced_searches),
-                        ));
-                        stat("Fail Low", format!(
-                            "{:>6} ({:>6.2}%)",
-                            fmt_numbers(search_stats.search_counters.reduced_fail_low),
-                            search_stats.search_counters.reduced_fail_low as f64
-                                / search_stats.search_counters.reduced_searches.max(1) as f64
-                                * 100.0
-                        ));
-                        stat("Fail High", format!(
-                            "{:>6} ({:>6.2}%)",
-                            fmt_numbers(search_stats.search_counters.reduced_fail_high),
-                            search_stats.search_counters.reduced_fail_high as f64
-                                / search_stats.search_counters.reduced_searches.max(1) as f64
-                                * 100.0
-                        ));
-                        stat("Verify Low", format!(
-                            "{:>6} ({:>6.2}%)",
-                            fmt_numbers(search_stats.search_counters.verified_fail_low),
-                            search_stats.search_counters.verified_fail_low as f64
-                                / search_stats.search_counters.reduced_fail_high.max(1) as f64
-                                * 100.0
-                        ));
-                        stat("Verify High", format!(
-                            "{:>6} ({:>6.2}%)",
-                            fmt_numbers(search_stats.search_counters.verified_fail_high),
-                            search_stats.search_counters.verified_fail_high as f64
-                                / search_stats.search_counters.reduced_fail_high.max(1) as f64
-                                * 100.0
-                        ));
+                        stat(
+                            "Reduced",
+                            format!(
+                                "{:>6}",
+                                fmt_numbers(search_stats.search_counters.reduced_searches),
+                            ),
+                        );
+                        stat(
+                            "Fail Low",
+                            format!(
+                                "{:>6} ({:>6.2}%)",
+                                fmt_numbers(search_stats.search_counters.reduced_fail_low),
+                                search_stats.search_counters.reduced_fail_low as f64
+                                    / search_stats.search_counters.reduced_searches.max(1) as f64
+                                    * 100.0
+                            ),
+                        );
+                        stat(
+                            "Fail High",
+                            format!(
+                                "{:>6} ({:>6.2}%)",
+                                fmt_numbers(search_stats.search_counters.reduced_fail_high),
+                                search_stats.search_counters.reduced_fail_high as f64
+                                    / search_stats.search_counters.reduced_searches.max(1) as f64
+                                    * 100.0
+                            ),
+                        );
+                        stat(
+                            "Verify Low",
+                            format!(
+                                "{:>6} ({:>6.2}%)",
+                                fmt_numbers(search_stats.search_counters.verified_fail_low),
+                                search_stats.search_counters.verified_fail_low as f64
+                                    / search_stats.search_counters.reduced_fail_high.max(1) as f64
+                                    * 100.0
+                            ),
+                        );
+                        stat(
+                            "Verify High",
+                            format!(
+                                "{:>6} ({:>6.2}%)",
+                                fmt_numbers(search_stats.search_counters.verified_fail_high),
+                                search_stats.search_counters.verified_fail_high as f64
+                                    / search_stats.search_counters.reduced_fail_high.max(1) as f64
+                                    * 100.0
+                            ),
+                        );
                         println!();
                     }
                     SearchFinished { .. } => {

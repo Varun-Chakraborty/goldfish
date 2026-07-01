@@ -13,11 +13,18 @@ use std::{
 };
 
 use crate::{
-    EngineEvent, game::{GameState, MoveGenMode}, history::HistoryHeuristic, search::{
-        negamax::negamax, quiescence::quiescence, search_types::{
-            EngineLimits, IterationInfo, PVTable, Score, SearchContext, SearchCounters, SearchStats, SearchType::FullSearch,
+    EngineEvent,
+    game::{GameState, MoveGenMode},
+    history::HistoryHeuristic,
+    search::{
+        negamax::negamax,
+        quiescence::quiescence,
+        search_types::{
+            EngineLimits, IterationInfo, PVTable, Score, SearchContext, SearchCounters,
+            SearchStats, SearchType::FullSearch,
         },
-    }, transposition::TranspositionTable,
+    },
+    transposition::TranspositionTable,
 };
 
 pub const MATE: i32 = 32000;
@@ -61,17 +68,7 @@ pub fn iterative_deepening<F>(
     loop {
         ctx.stopped = false;
 
-        let result = negamax(
-            gs,
-            depth,
-            0,
-            -MATE,
-            MATE,
-            &pv,
-            true,
-            FullSearch,
-            &mut ctx,
-        );
+        let result = negamax(gs, depth, 0, -MATE, MATE, &pv, true, FullSearch, &mut ctx);
 
         if ctx.stopped || stop.load(Ordering::Relaxed) {
             break;
@@ -91,9 +88,7 @@ pub fn iterative_deepening<F>(
             score: score(result.score),
             raw_score: result.score,
             nodes: ctx.search_stats.search_counters.nodes + ctx.qsearch_stats.nodes,
-            nps: ((ctx.search_stats.search_counters.nodes + ctx.qsearch_stats.nodes) as f64
-                / duration.as_secs_f64())
-            .ceil() as u64,
+            nps: ((ctx.search_stats.search_counters.nodes + ctx.qsearch_stats.nodes) as f64 / duration.as_secs_f64()).ceil() as u64,
             time: duration,
             best_line: pv.clone(),
             hashfull: tt_stats.hashfull,

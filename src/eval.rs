@@ -3,16 +3,6 @@ use crate::{
     types::{Color, Coordinate, PieceType, Square},
 };
 
-pub fn piece_value(piece: &PieceType) -> i32 {
-    match piece {
-        PieceType::Pawn => 100,
-        PieceType::Knight => 320,
-        PieceType::Bishop => 330,
-        PieceType::Rook => 500,
-        PieceType::Queen => 900,
-        PieceType::King => 0,
-    }
-}
 // [
 //      0,  0,  0,  0,  0,  0,  0,  0,
 //      5, 10, 10,-10,-10, 10, 10,  5,
@@ -178,72 +168,79 @@ impl std::fmt::Display for Evaluation {
     }
 }
 
-pub fn eval(gs: &GameState) -> (i32, Evaluation) {
-    let board = &gs.board;
-    let mut white_bishops = 0;
-    let mut black_bishops = 0;
-    let mut eval: Evaluation = Evaluation {
-        material: 0,
-        pst: 0,
-        bishop_pairs: 0,
-        king_safety: 0,
-    };
-    let mut material_on_board = 0;
+impl Evaluation {
+    pub fn score(&self) -> i32 {
+        self.material + self.pst + self.bishop_pairs + self.king_safety
+    }
+}
 
-    for idx in 0..64 {
-        let sq = board.get(Coordinate::from_idx(idx));
-        match sq {
-            Square::Occupied { color, piece } if color == Color::White => {
-                let material = piece_value(&piece);
-                eval.material += material;
-                material_on_board += material;
-                let pst = pst(&piece, color, idx);
-                eval.pst += pst;
-                if piece == PieceType::Bishop {
-                    white_bishops += 1;
-                }
-            }
-            Square::Occupied { piece, color } => {
-                let material = piece_value(&piece);
-                eval.material -= material;
-                material_on_board += material;
-                let pst = pst(&piece, color, idx);
-                eval.pst -= pst;
+impl GameState {
+    pub fn eval(&self) -> Evaluation {
+        let board = &self.board;
+        let mut white_bishops = 0;
+        let mut black_bishops = 0;
+        let mut eval: Evaluation = Evaluation {
+            material: 0,
+            pst: 0,
+            bishop_pairs: 0,
+            king_safety: 0,
+        };
+        let mut material_on_board = 0;
 
-                if piece == PieceType::Bishop {
-                    black_bishops += 1;
+        for idx in 0..64 {
+            let sq = board.get(Coordinate::from_idx(idx));
+            match sq {
+                Square::Occupied { color, piece } if color == Color::White => {
+                    let material = piece.value();
+                    eval.material += material;
+                    material_on_board += material;
+                    let pst = pst(&piece, color, idx);
+                    eval.pst += pst;
+                    if piece == PieceType::Bishop {
+                        white_bishops += 1;
+                    }
                 }
+                Square::Occupied { piece, color } => {
+                    let material = piece.value();
+                    eval.material -= material;
+                    material_on_board += material;
+                    let pst = pst(&piece, color, idx);
+                    eval.pst -= pst;
+
+                    if piece == PieceType::Bishop {
+                        black_bishops += 1;
+                    }
+                }
+                _ => (),
             }
-            _ => (),
         }
+
+        if white_bishops >= 2 {
+            eval.bishop_pairs += 30;
+        }
+        if black_bishops >= 2 {
+            eval.bishop_pairs -= 30;
+        }
+
+        let phase = phase_factor(material_on_board);
+
+        let white_king_safety = king_pawn_shield_penalty(self, Color::White);
+        let black_king_safety = king_pawn_shield_penalty(self, Color::Black);
+        eval.king_safety = ((white_king_safety - black_king_safety) as f32 * phase) as i32;
+
+        eval
     }
-
-    if white_bishops >= 2 {
-        eval.bishop_pairs += 30;
-    }
-    if black_bishops >= 2 {
-        eval.bishop_pairs -= 30;
-    }
-
-    let phase = phase_factor(material_on_board);
-
-    let white_king_safety = king_pawn_shield_penalty(gs, Color::White);
-    let black_king_safety = king_pawn_shield_penalty(gs, Color::Black);
-    eval.king_safety = ((white_king_safety - black_king_safety) as f32 * phase) as i32;
-
-    let score = eval.material + eval.pst + eval.bishop_pairs + eval.king_safety;
-
-    (score, eval)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{eval::eval, game::GameState};
+    use crate::game::GameState;
     #[test]
     fn test_eval() {
         let gs = GameState::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
             .unwrap();
-        let (score, eval) = eval(&gs);
+        let eval = gs.eval();
+        let score = eval.score();
         println!("{score} {eval}");
         assert_eq!(score, 0);
     }
@@ -253,7 +250,8 @@ mod tests {
         let gs =
             GameState::from_fen("rn1qkb1r/pppppppp/5n2/8/4P3/8/PPPP1PPP/RNB1KBNR b KQkq - 0 1")
                 .unwrap();
-        let (score, eval) = eval(&gs);
+        let eval = gs.eval();
+        let score = eval.score();
         println!("{score} {eval}");
         assert!(score < 0);
     }

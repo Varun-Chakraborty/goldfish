@@ -225,7 +225,7 @@ pub fn negamax(
                     Scout,
                     ctx,
                 );
-    
+
                 if -result.score <= alpha {
                     ctx.search_stats.search_counters.verified_fail_low += 1;
                     gs.unmake_move(undo);
@@ -234,7 +234,6 @@ pub fn negamax(
 
                 ctx.search_stats.search_counters.verified_fail_high += 1;
             }
-
         }
         let mut result = negamax(
             gs,
@@ -267,8 +266,7 @@ pub fn negamax(
             search_result.best_move = Some(m);
             if search_type != Scout {
                 ctx.pv_table.table[ply as usize][ply as usize] = search_result.best_move;
-                ctx.pv_table.length[ply as usize] =
-                    ctx.pv_table.length[ply as usize + 1] + 1;
+                ctx.pv_table.length[ply as usize] = ctx.pv_table.length[ply as usize + 1] + 1;
                 for i in 1..ctx.pv_table.length[ply as usize] {
                     ctx.pv_table.table[ply as usize][(ply + i) as usize] =
                         ctx.pv_table.table[ply as usize + 1][(ply + i) as usize];
@@ -279,19 +277,14 @@ pub fn negamax(
         ctx.search_stats.search_counters.examined_moves += 1;
         if alpha >= beta {
             if i == 0 {
-                ctx
-                    .search_stats
-                    .search_counters
-                    .first_move_cutoffs += 1;
+                ctx.search_stats.search_counters.first_move_cutoffs += 1;
             }
             if m.captured.is_none() && search_type != Scout {
-                ctx
-                    .history_heuristics
+                ctx.history_heuristics
                     .reward(gs.turn.opponent(), &m, depth as u16);
 
                 for m in searched_quiets {
-                    ctx
-                        .history_heuristics
+                    ctx.history_heuristics
                         .penalize(gs.turn.opponent(), &m, depth as u16);
                 }
             }

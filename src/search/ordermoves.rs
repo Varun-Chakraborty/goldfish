@@ -1,7 +1,6 @@
 use std::cmp::Reverse;
 
 use crate::{
-    eval::piece_value,
     history::HistoryHeuristic,
     types::{Color, Move},
 };
@@ -27,7 +26,7 @@ pub fn ordermoves(
         }
         if let Some(captured) = m.captured {
             score += CAPTURE_BONUS;
-            score += piece_value(&captured) * 100 - piece_value(&m.piece);
+            score += captured.value() * 100 - m.piece.value();
         } else {
             score += history.score(side_to_move, m) as i32;
         }

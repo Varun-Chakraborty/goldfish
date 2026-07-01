@@ -2,7 +2,8 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
-    }, time::{Duration, Instant},
+    },
+    time::{Duration, Instant},
 };
 
 use crate::{
@@ -50,8 +51,7 @@ pub struct SearchContext<'a> {
 impl<'a> SearchContext<'a> {
     #[inline]
     pub fn should_stop(&self) -> bool {
-        if (self.search_stats.search_counters.nodes + self.qsearch_stats.nodes)
-            .is_multiple_of(2048)
+        if (self.search_stats.search_counters.nodes + self.qsearch_stats.nodes).is_multiple_of(2048)
         {
             return self.stop.load(Ordering::Relaxed);
         }

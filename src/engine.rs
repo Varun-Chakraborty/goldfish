@@ -94,11 +94,29 @@ impl GoldFish {
     {
         let gs = &self.gamestate;
         let fen = gs.to_fen();
-        callback(EngineEvent::Debug { string: format!("") });
-        callback(EngineEvent::Debug { string: format!("{}", gs.representation()) });
-        callback(EngineEvent::Debug { string: format!("Fen: {fen}") });
-        callback(EngineEvent::Debug { string: format!("Key: {:0X}", gs.zobrist) });
-        callback(EngineEvent::Debug { string: format!("Checkers: {}", gs.checks(gs.turn).iter().map(|c| c.0.to_algebraic()).collect::<Vec<_>>().join(" ") ) });
+        callback(EngineEvent::Debug {
+            string: format!(""),
+        });
+        callback(EngineEvent::Debug {
+            string: format!("{}", gs.representation()),
+        });
+        callback(EngineEvent::Debug {
+            string: format!("Fen: {fen}"),
+        });
+        callback(EngineEvent::Debug {
+            string: format!("Key: {:0X}", gs.zobrist),
+        });
+        callback(EngineEvent::Debug {
+            string: format!(
+                "Checkers: {}",
+                gs.checks(gs.turn)
+                    .iter()
+                    .flatten()
+                    .map(|c| c.0.to_algebraic())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ),
+        });
         Ok(())
     }
 

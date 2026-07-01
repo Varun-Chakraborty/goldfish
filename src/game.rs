@@ -1,7 +1,10 @@
 use std::num::ParseIntError;
 
 use crate::{
-    board::{Board, BoardError}, game::Direction::{Horizontal, LeftDiagonal, Offset, RightDiagonal, Vertical}, types::{CastleSide, CastlingRights, Color, ColorError, Coordinate, Move, PieceType, Square}, zobrist::{
+    board::{Board, BoardError},
+    game::Direction::{Horizontal, LeftDiagonal, Offset, RightDiagonal, Vertical},
+    types::{CastleSide, CastlingRights, Color, ColorError, Coordinate, Move, PieceType, Square},
+    zobrist::{
         compute_hash, get_black_to_move, get_castling_rights, get_en_passant_files, get_piece_sq,
     },
 };
@@ -77,8 +80,35 @@ pub struct GameState {
 pub enum MoveGenMode {
     All,
     CaptureOnly,
-    CapturesAndChecks,
 }
+
+static QUEEN: &[(i8, i8)] = &[
+    (1, 1),
+    (1, -1),
+    (-1, 1),
+    (-1, -1),
+    (1, 0),
+    (0, 1),
+    (-1, 0),
+    (0, -1),
+];
+static DIAGONAL: &[(i8, i8)] = &[(1, 1), (1, -1), (-1, 1), (-1, -1)];
+static RIGHT_DIAGONAL: &[(i8, i8)] = &[(1, 1), (-1, -1)];
+static LEFT_DIAGONAL: &[(i8, i8)] = &[(1, -1), (-1, 1)];
+static STRAIGHT: &[(i8, i8)] = &[(1, 0), (0, 1), (-1, 0), (0, -1)];
+static HORIZONTAL: &[(i8, i8)] = &[(1, 0), (-1, 0)];
+static VERTICAL: &[(i8, i8)] = &[(0, 1), (0, -1)];
+static EMPTY: &[(i8, i8)] = &[];
+static KNIGHT_OFFSETS: &[(i8, i8)] = &[
+    (1, 2),
+    (2, 1),
+    (2, -1),
+    (1, -2),
+    (-1, -2),
+    (-2, -1),
+    (-2, 1),
+    (-1, 2),
+];
 
 impl GameState {
     pub fn from_fen(fen: &str) -> Result<Self, GameStateError> {
@@ -192,7 +222,7 @@ impl GameState {
             (PieceType::Rook, Color::Black) => 7,
             (PieceType::Queen, Color::White) => 8,
             (PieceType::Queen, Color::Black) => 9,
-            _ => unreachable!(),
+            p => unreachable!("{p:?}\n{}", self.representation()),
         }
     }
 
@@ -273,7 +303,12 @@ impl GameState {
         }
     }
 
-    pub fn lva(&self, coord: Coordinate, by: Color, dir: Option<Direction>) -> Option<(Coordinate, PieceType)> {
+    pub fn lva(
+        &self,
+        coord: Coordinate,
+        by: Color,
+        dir: Option<Direction>,
+    ) -> Option<(Coordinate, PieceType)> {
         let pawn_dir: i8 = if by == Color::White { -1 } else { 1 };
         if dir.as_ref().is_none_or(|&dir| dir == RightDiagonal) {
             let df = pawn_dir;
@@ -304,16 +339,7 @@ impl GameState {
         }
 
         if dir.as_ref().is_none_or(|&dir| dir == Offset) {
-            for &(df, dr) in &[
-                (1, 2),
-                (2, 1),
-                (2, -1),
-                (1, -2),
-                (-1, -2),
-                (-2, -1),
-                (-2, 1),
-                (-1, 2),
-            ] {
+            for &(df, dr) in KNIGHT_OFFSETS {
                 if let Some(target) = coord.checked_offset(df, dr) {
                     match self.board.get(target) {
                         Square::Occupied { color, piece }
@@ -327,24 +353,16 @@ impl GameState {
             }
         }
 
-        let diagonal = match dir.as_ref() {
+        let bishop = match dir.as_ref() {
             Some(&dir) => match dir {
-                Vertical | Horizontal | Offset => vec![],
-                RightDiagonal => vec![(1, 1), (-1, -1)],
-                LeftDiagonal => vec![(-1, 1), (1, -1)],
+                Vertical | Horizontal | Offset => EMPTY,
+                RightDiagonal => RIGHT_DIAGONAL,
+                LeftDiagonal => LEFT_DIAGONAL,
             },
-            None => vec![(1, 1), (1, -1), (-1, 1), (-1, -1)],
-        };
-        let straight = match dir.as_ref() {
-            Some(&dir) => match dir {
-                RightDiagonal | LeftDiagonal | Offset => vec![],
-                Horizontal => vec![(1, 0), (-1, 0)],
-                Vertical => vec![(0, 1), (0, -1)],
-            },
-            None => vec![(0, 1), (1, 0), (0, -1), (-1, 0)],
+            None => DIAGONAL,
         };
 
-        for &(df, dr) in &diagonal {
+        for &(df, dr) in bishop {
             let mut c = coord;
             while let Some(next) = c.checked_offset(df, dr) {
                 c = next;
@@ -359,7 +377,16 @@ impl GameState {
             }
         }
 
-        for &(df, dr) in &straight {
+        let rook = match dir.as_ref() {
+            Some(&dir) => match dir {
+                RightDiagonal | LeftDiagonal | Offset => EMPTY,
+                Horizontal => HORIZONTAL,
+                Vertical => VERTICAL,
+            },
+            None => STRAIGHT,
+        };
+
+        for &(df, dr) in rook {
             let mut c = coord;
             while let Some(next) = c.checked_offset(df, dr) {
                 c = next;
@@ -374,7 +401,18 @@ impl GameState {
             }
         }
 
-        for &(df, dr) in straight.iter().chain(diagonal.iter()) {
+        let queen = match dir.as_ref() {
+            None => QUEEN,
+            Some(dir) => match dir {
+                RightDiagonal => RIGHT_DIAGONAL,
+                LeftDiagonal => LEFT_DIAGONAL,
+                Horizontal => HORIZONTAL,
+                Vertical => VERTICAL,
+                _ => EMPTY,
+            },
+        };
+
+        for &(df, dr) in queen {
             let mut c = coord;
             while let Some(next) = c.checked_offset(df, dr) {
                 c = next;
@@ -389,27 +427,8 @@ impl GameState {
             }
         }
 
-        let dir = match dir.as_ref() {
-            Some(&dir) => match dir {
-                RightDiagonal => vec![(1, 1), (-1, -1)],
-                LeftDiagonal => vec![(-1, 1), (1, -1)],
-                Horizontal => vec![(1, 0), (-1, 0)],
-                Vertical => vec![(0, 1), (0, -1)],
-                Offset => vec![],
-            },
-            None => vec![
-                (1, 1),
-                (1, -1),
-                (-1, 1),
-                (-1, -1),
-                (0, 1),
-                (0, -1),
-                (1, 0),
-                (-1, 0),
-            ],
-        };
-
-        for (df, dr) in dir {
+        // treating directions as offsets
+        for &(df, dr) in queen {
             if let Some(target) = coord.checked_offset(df, dr) {
                 match self.board.get(target) {
                     Square::Occupied { color, piece }
@@ -491,7 +510,7 @@ impl GameState {
         pinmap
     }
 
-    pub fn checks(&self, to: Color) -> Vec<(Coordinate, Direction)> {
+    pub fn checks(&self, to: Color) -> [Option<(Coordinate, Direction)>; 2] {
         let king = match to {
             Color::White => self.kings.0,
             Color::Black => self.kings.1,
@@ -505,14 +524,16 @@ impl GameState {
             Direction::RightDiagonal,
         ];
 
-        let mut checks = vec![];
+        let mut count = 0;
+        let mut checks = [None; 2];
 
         for d in directions {
             if let Some((c, piece)) = self.lva(king, to.opponent(), Some(d)) {
-                checks.push((c, if piece == PieceType::Pawn { Offset } else { d }));
-            }
-            if checks.len() == 2 {
-                break;
+                checks[count] = Some((c, if piece == PieceType::Pawn { Offset } else { d }));
+                if count == 2 {
+                    break;
+                }
+                count += 1;
             }
         }
 
@@ -520,7 +541,7 @@ impl GameState {
     }
 
     pub fn in_check(&self, color: Color) -> bool {
-        self.checks(color).len() > 0
+        self.checks(color)[0].is_some()
     }
 
     fn pawn_moves(
@@ -539,7 +560,7 @@ impl GameState {
 
         let pinned = pin_map.get(from);
 
-        if pinned.is_none_or(|dir| dir == Vertical) {
+        if pinned.is_none_or(|dir| dir == Vertical) && move_gen_mode == MoveGenMode::All {
             if let Some(to) = from.checked_offset(0, dir)
                 && self.board.get(to) == Square::Empty
             {
@@ -662,18 +683,8 @@ impl GameState {
         if pinned.is_some() {
             return;
         }
-        let offsets = [
-            (1, 2),
-            (2, 1),
-            (2, -1),
-            (1, -2),
-            (-1, -2),
-            (-2, -1),
-            (-2, 1),
-            (-1, 2),
-        ];
-        for (df, dr) in &offsets {
-            if let Some(to) = from.checked_offset(*df, *dr) {
+        for &(df, dr) in KNIGHT_OFFSETS {
+            if let Some(to) = from.checked_offset(df, dr) {
                 if target_squares
                     .as_ref()
                     .is_some_and(|sqrs| !sqrs.contains(&to))
@@ -685,7 +696,11 @@ impl GameState {
                     Square::Occupied { piece, .. } => {
                         moves.push(Move::new_capture(from, to, PieceType::Knight, piece))
                     }
-                    _ => moves.push(Move::new(from, to, PieceType::Knight)),
+                    _ => {
+                        if move_gen_mode == MoveGenMode::All {
+                            moves.push(Move::new(from, to, PieceType::Knight))
+                        }
+                    }
                 }
             }
         }
@@ -704,44 +719,35 @@ impl GameState {
         let pinned = pin_map.get(from);
         let directions = match piece {
             PieceType::Bishop => match pinned {
-                None => vec![(1, 1), (1, -1), (-1, 1), (-1, -1)],
+                None => DIAGONAL,
                 Some(dir) => match dir {
-                    RightDiagonal => vec![(1, 1), (-1, -1)],
-                    LeftDiagonal => vec![(1, -1), (-1, 1)],
-                    _ => vec![],
+                    RightDiagonal => RIGHT_DIAGONAL,
+                    LeftDiagonal => LEFT_DIAGONAL,
+                    _ => EMPTY,
                 },
             },
             PieceType::Rook => match pinned {
-                None => vec![(0, 1), (1, 0), (0, -1), (-1, 0)],
+                None => STRAIGHT,
                 Some(dir) => match dir {
-                    Vertical => vec![(1, 0), (-1, 0)],
-                    Horizontal => vec![(0, 1), (0, -1)],
-                    _ => vec![],
+                    Vertical => VERTICAL,
+                    Horizontal => HORIZONTAL,
+                    _ => EMPTY,
                 },
             },
             PieceType::Queen => match pinned {
-                None => vec![
-                    (0, 1),
-                    (1, 0),
-                    (0, -1),
-                    (-1, 0),
-                    (1, 1),
-                    (1, -1),
-                    (-1, 1),
-                    (-1, -1),
-                ],
+                None => QUEEN,
                 Some(dir) => match dir {
-                    RightDiagonal => vec![(1, 1), (-1, -1)],
-                    LeftDiagonal => vec![(1, -1), (-1, 1)],
-                    Horizontal => vec![(1, 0), (-1, 0)],
-                    Vertical => vec![(0, 1), (0, -1)],
-                    _ => vec![],
+                    RightDiagonal => RIGHT_DIAGONAL,
+                    LeftDiagonal => LEFT_DIAGONAL,
+                    Horizontal => HORIZONTAL,
+                    Vertical => VERTICAL,
+                    _ => EMPTY,
                 },
             },
             _ => unreachable!(),
         };
 
-        for (df, dr) in directions {
+        for &(df, dr) in directions {
             let mut cur = from;
             while let Some(to) = cur.checked_offset(df, dr) {
                 cur = to;
@@ -760,7 +766,11 @@ impl GameState {
                             continue;
                         }
                         match sq {
-                            Square::Empty => moves.push(Move::new(from, cur, piece)),
+                            Square::Empty => {
+                                if move_gen_mode == MoveGenMode::All {
+                                    moves.push(Move::new(from, cur, piece))
+                                }
+                            }
                             Square::Occupied {
                                 piece: captured, ..
                             } => {
@@ -778,7 +788,7 @@ impl GameState {
         &self,
         from: Coordinate,
         moves: &mut Vec<Move>,
-        checks: &Vec<(Coordinate, Direction)>,
+        checks: &[Option<(Coordinate, Direction)>; 2],
         move_gen_mode: MoveGenMode,
     ) {
         let color = self.turn;
@@ -788,12 +798,28 @@ impl GameState {
                     continue;
                 }
                 if let Some(to) = from.checked_offset(df, dr) {
-                    let prohibited = checks.iter().any(|(c, _)| c != &to) &&
-                        (df == dr && checks.iter().any(|(_, d)| d == &Direction::RightDiagonal)
-                        || df == -dr && checks.iter().any(|(_, d)| d == &Direction::LeftDiagonal)
-                        || df == 0 && checks.iter().any(|(_, d)| d == &Direction::Vertical)
-                        || dr == 0 && checks.iter().any(|(_, d)| d == &Direction::Horizontal));
-                    
+                    let prohibited = checks.iter().flatten().any(|(c, _)| c != &to)
+                        && (df == dr
+                            && checks
+                                .iter()
+                                .flatten()
+                                .any(|(_, d)| d == &Direction::RightDiagonal)
+                            || df == -dr
+                                && checks
+                                    .iter()
+                                    .flatten()
+                                    .any(|(_, d)| d == &Direction::LeftDiagonal)
+                            || df == 0
+                                && checks
+                                    .iter()
+                                    .flatten()
+                                    .any(|(_, d)| d == &Direction::Vertical)
+                            || dr == 0
+                                && checks
+                                    .iter()
+                                    .flatten()
+                                    .any(|(_, d)| d == &Direction::Horizontal));
+
                     if prohibited {
                         continue;
                     }
@@ -808,6 +834,10 @@ impl GameState {
                             moves.push(Move::new_capture(from, to, PieceType::King, piece))
                         }
                         _ => {
+                            if move_gen_mode != MoveGenMode::All {
+                                continue;
+                            }
+
                             let is_attacked = self.lva(to, color.opponent(), None).is_some();
                             if is_attacked {
                                 continue;
@@ -898,16 +928,16 @@ impl GameState {
         let checks = self.checks(us);
         let mut target_squares = None;
 
-        if checks.len() > 1 {
+        if let Some(_) = checks[1] {
             let king = match us {
                 Color::White => self.kings.0,
                 Color::Black => self.kings.1,
             };
             self.king_moves(king, &mut legal_moves, &checks, move_gen_mode);
             return legal_moves;
-        } else if checks.len() == 1 {
-            let mut targets = vec![checks[0].0];
-            let direction = checks[0].1;
+        } else if let Some(c) = checks[0] {
+            let mut targets = vec![c.0];
+            let direction = c.1;
             match direction {
                 Direction::Offset => {}
                 _ => {
@@ -916,8 +946,8 @@ impl GameState {
                         Color::Black => self.kings.1,
                     };
 
-                    let df = checks[0].0.file() as i8 - king.file() as i8;
-                    let dr = checks[0].0.rank() as i8 - king.rank() as i8;
+                    let df = c.0.file() as i8 - king.file() as i8;
+                    let dr = c.0.rank() as i8 - king.rank() as i8;
 
                     let dr = dr.signum();
                     let df = df.signum();

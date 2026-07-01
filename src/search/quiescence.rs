@@ -1,6 +1,5 @@
 use crate::{
     GameState,
-    eval::eval,
     game::MoveGenMode,
     position::{
         DrawReason::{FiftyMoveRule, InsufficientMaterial, ThreefoldRepetition},
@@ -52,10 +51,12 @@ pub fn quiescence(
     let in_check = gs.in_check(gs.turn);
 
     if !in_check {
-        let stand_pat = match gs.turn {
-            Color::White => eval(gs).0,
-            Color::Black => -eval(gs).0,
-        };
+        let eval = gs.eval().score();
+        let stand_pat = eval
+            * match gs.turn {
+                Color::White => 1,
+                Color::Black => -1,
+            };
 
         if stand_pat >= beta {
             ctx.qsearch_stats.cutoffs += 1;
@@ -84,13 +85,7 @@ pub fn quiescence(
         gs.legal_moves(MoveGenMode::CaptureOnly)
     };
 
-    ordermoves(
-        &mut legal,
-        gs.turn,
-        None,
-        None,
-        ctx.history_heuristics,
-    );
+    ordermoves(&mut legal, gs.turn, None, None, ctx.history_heuristics);
     let total_moves = legal.len();
     ctx.qsearch_stats.available_moves += total_moves as u64;
 
