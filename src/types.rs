@@ -339,7 +339,7 @@ impl Move {
         s.push_str(&self.from.to_algebraic());
         s.push_str(&self.to.to_algebraic());
         if let Some(promotion) = self.promotion {
-            s.push(promotion.to_char());
+            s.push(promotion.to_char().to_ascii_lowercase());
         }
         s
     }
