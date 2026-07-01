@@ -74,7 +74,7 @@ fn main() {
                             "{}n ({}n) @ {:.2}Mn/s",
                             fmt_numbers(search_stats.search_counters.nodes),
                             fmt_delta(search_stats.delta),
-                            info.nps as f64 / 1_000_000.0,
+                            search_stats.search_counters.nodes as f64 / info.time.as_secs_f64() / 1_000_000.0,
                         ));
                         stat("QNodes", format!(
                             "{}n @ {:.2}Mn/s",

@@ -1,4 +1,4 @@
-use std::sync::{Arc, atomic::AtomicBool};
+use std::{sync::{Arc, atomic::AtomicBool},time::Instant,};
 
 use thiserror::Error;
 
@@ -144,6 +144,7 @@ impl GoldFish {
 
         let legal = position.legal_moves.expect("No legal moves");
         let mut t_nodes = 0;
+        let now = Instant::now();
 
         for m in legal {
             let undo = gs.make_move(m);
@@ -159,7 +160,7 @@ impl GoldFish {
         }
 
         callback(EngineEvent::Debug {
-            string: format!("Nodes searched: {}", t_nodes),
+            string: format!("Nodes searched: {} took {:.2}s", t_nodes, now.elapsed().as_secs_f32()),
         });
 
         Ok(())
