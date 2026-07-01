@@ -308,6 +308,7 @@ impl GameState {
         coord: Coordinate,
         by: Color,
         dir: Option<Direction>,
+        exclusion_list: Option<&[Coordinate]>,
     ) -> Option<(Coordinate, PieceType)> {
         let pawn_dir: i8 = if by == Color::White { -1 } else { 1 };
         if dir.as_ref().is_none_or(|&dir| dir == RightDiagonal) {
@@ -317,7 +318,9 @@ impl GameState {
                     Square::Occupied { color, piece }
                         if color == by && piece == PieceType::Pawn =>
                     {
-                        return Some((target, piece));
+                        if exclusion_list.is_none_or(|e| !e.contains(&target)) {
+                            return Some((target, piece));
+                        }
                     }
                     _ => {}
                 }
@@ -331,7 +334,9 @@ impl GameState {
                     Square::Occupied { color, piece }
                         if color == by && piece == PieceType::Pawn =>
                     {
-                        return Some((target, piece));
+                        if exclusion_list.is_none_or(|e| !e.contains(&target)) {
+                            return Some((target, piece));
+                        }
                     }
                     _ => {}
                 }
@@ -345,7 +350,9 @@ impl GameState {
                         Square::Occupied { color, piece }
                             if color == by && piece == PieceType::Knight =>
                         {
-                            return Some((target, piece));
+                            if exclusion_list.is_none_or(|e| !e.contains(&target)) {
+                                return Some((target, piece));
+                            }
                         }
                         _ => continue,
                     }
@@ -370,7 +377,11 @@ impl GameState {
                 match sq {
                     Square::Empty => continue,
                     Square::Occupied { color, piece } => match piece {
-                        PieceType::Bishop if color == by => return Some((c, piece)),
+                        PieceType::Bishop if color == by => {
+                            if exclusion_list.is_none_or(|e| !e.contains(&c)) {
+                                return Some((c, piece));
+                            }
+                        }
                         _ => break,
                     },
                 }
@@ -394,7 +405,11 @@ impl GameState {
                 match sq {
                     Square::Empty => continue,
                     Square::Occupied { color, piece } => match piece {
-                        PieceType::Rook if color == by => return Some((c, piece)),
+                        PieceType::Rook if color == by => {
+                            if exclusion_list.is_none_or(|e| !e.contains(&c)) {
+                                return Some((c, piece));
+                            }
+                        }
                         _ => break,
                     },
                 }
@@ -420,7 +435,11 @@ impl GameState {
                 match sq {
                     Square::Empty => continue,
                     Square::Occupied { color, piece } => match piece {
-                        PieceType::Queen if color == by => return Some((c, piece)),
+                        PieceType::Queen if color == by => {
+                            if exclusion_list.is_none_or(|e| !e.contains(&c)) {
+                                return Some((c, piece));
+                            }
+                        }
                         _ => break,
                     },
                 }
@@ -434,7 +453,9 @@ impl GameState {
                     Square::Occupied { color, piece }
                         if color == by && piece == PieceType::King =>
                     {
-                        return Some((target, piece));
+                        if exclusion_list.is_none_or(|e| !e.contains(&target)) {
+                            return Some((target, piece));
+                        }
                     }
                     _ => continue,
                 }
@@ -528,7 +549,7 @@ impl GameState {
         let mut checks = [None; 2];
 
         for d in directions {
-            if let Some((c, piece)) = self.lva(king, to.opponent(), Some(d)) {
+            if let Some((c, piece)) = self.lva(king, to.opponent(), Some(d), None) {
                 checks[count] = Some((c, if piece == PieceType::Pawn { Offset } else { d }));
                 if count == 2 {
                     break;
@@ -827,7 +848,7 @@ impl GameState {
                     match self.board.get(to) {
                         Square::Occupied { color: c, .. } if c == color => continue,
                         Square::Occupied { piece, .. } => {
-                            let is_attacked = self.lva(to, color.opponent(), None).is_some();
+                            let is_attacked = self.lva(to, color.opponent(), None, None).is_some();
                             if is_attacked {
                                 continue;
                             }
@@ -838,7 +859,7 @@ impl GameState {
                                 continue;
                             }
 
-                            let is_attacked = self.lva(to, color.opponent(), None).is_some();
+                            let is_attacked = self.lva(to, color.opponent(), None, None).is_some();
                             if is_attacked {
                                 continue;
                             }
@@ -870,13 +891,28 @@ impl GameState {
                     .iter()
                     .all(|&c| self.board.get(c) == Square::Empty)
                 && !self
-                    .lva(Coordinate::new_coordinate(4, rank), color.opponent(), None)
+                    .lva(
+                        Coordinate::new_coordinate(4, rank),
+                        color.opponent(),
+                        None,
+                        None,
+                    )
                     .is_some()
                 && !self
-                    .lva(Coordinate::new_coordinate(5, rank), color.opponent(), None)
+                    .lva(
+                        Coordinate::new_coordinate(5, rank),
+                        color.opponent(),
+                        None,
+                        None,
+                    )
                     .is_some()
                 && !self
-                    .lva(Coordinate::new_coordinate(6, rank), color.opponent(), None)
+                    .lva(
+                        Coordinate::new_coordinate(6, rank),
+                        color.opponent(),
+                        None,
+                        None,
+                    )
                     .is_some()
             {
                 moves.push(Move::new_castle(
@@ -904,13 +940,28 @@ impl GameState {
                     .iter()
                     .all(|&c| self.board.get(c) == Square::Empty)
                 && !self
-                    .lva(Coordinate::new_coordinate(4, rank), color.opponent(), None)
+                    .lva(
+                        Coordinate::new_coordinate(4, rank),
+                        color.opponent(),
+                        None,
+                        None,
+                    )
                     .is_some()
                 && !self
-                    .lva(Coordinate::new_coordinate(3, rank), color.opponent(), None)
+                    .lva(
+                        Coordinate::new_coordinate(3, rank),
+                        color.opponent(),
+                        None,
+                        None,
+                    )
                     .is_some()
                 && !self
-                    .lva(Coordinate::new_coordinate(2, rank), color.opponent(), None)
+                    .lva(
+                        Coordinate::new_coordinate(2, rank),
+                        color.opponent(),
+                        None,
+                        None,
+                    )
                     .is_some()
             {
                 moves.push(Move::new_castle(

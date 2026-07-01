@@ -1,4 +1,7 @@
-use std::{sync::{Arc, atomic::AtomicBool},time::Instant,};
+use std::{
+    sync::{Arc, atomic::AtomicBool},
+    time::Instant,
+};
 
 use thiserror::Error;
 
@@ -179,7 +182,11 @@ impl GoldFish {
         }
 
         callback(EngineEvent::Debug {
-            string: format!("Nodes searched: {} took {:.2}s", t_nodes, now.elapsed().as_secs_f32()),
+            string: format!(
+                "Nodes searched: {} took {:.2}s",
+                t_nodes,
+                now.elapsed().as_secs_f32()
+            ),
         });
 
         Ok(())

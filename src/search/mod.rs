@@ -88,7 +88,9 @@ pub fn iterative_deepening<F>(
             score: score(result.score),
             raw_score: result.score,
             nodes: ctx.search_stats.search_counters.nodes + ctx.qsearch_stats.nodes,
-            nps: ((ctx.search_stats.search_counters.nodes + ctx.qsearch_stats.nodes) as f64 / duration.as_secs_f64()).ceil() as u64,
+            nps: ((ctx.search_stats.search_counters.nodes + ctx.qsearch_stats.nodes) as f64
+                / duration.as_secs_f64())
+            .ceil() as u64,
             time: duration,
             best_line: pv.clone(),
             hashfull: tt_stats.hashfull,
