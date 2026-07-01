@@ -7,6 +7,7 @@ mod notation;
 mod opening_book;
 mod position;
 mod search;
+mod see;
 mod transposition;
 mod types;
 mod zobrist;
