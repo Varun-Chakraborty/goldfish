@@ -79,7 +79,7 @@ impl Board {
         for rank in (0..8).rev() {
             let mut empty = 0;
             for file in 0..8 {
-                let sq = self.get(Coordinate::new_coordinate(file, rank));
+                let sq = self.get(Coordinate::new(file, rank));
                 if sq == Square::Empty {
                     empty += 1;
                 } else {

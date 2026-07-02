@@ -66,6 +66,11 @@ fn main() {
                             println!("option name Ponder type check default true");
                             println!("uciok");
                         }
+                        Some("ucinewgame") => {
+                            if let Err(e) = cmd_sender.send(EngineCommand::NewGame) {
+                                println!("{e}");
+                            }
+                        }
                         Some("isready") => println!("readyok"),
                         Some("q") | Some("quit") => {
                             if let Err(e) = cmd_sender.send(EngineCommand::Quit) {

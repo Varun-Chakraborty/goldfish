@@ -35,7 +35,7 @@ pub struct GoldFish {
 }
 
 impl GoldFish {
-    pub fn new_engine() -> Result<Self, GoldFishError> {
+    pub fn new() -> Result<Self, GoldFishError> {
         Ok(Self {
             gamestate: GameState::from_fen(STARTPOS)?,
             tt: None,
@@ -48,7 +48,7 @@ impl GoldFish {
         match name {
             "Hash" => {
                 let hash = value.parse().unwrap();
-                self.tt = Some(TranspositionTable::new_table(hash));
+                self.tt = Some(TranspositionTable::new(hash));
             }
             _ => {}
         }
@@ -59,6 +59,12 @@ impl GoldFish {
             "startpos" => self.gamestate = GameState::from_fen(STARTPOS)?,
             fen => self.gamestate = GameState::from_fen(fen)?,
         }
+        Ok(())
+    }
+
+    pub fn new_game(&mut self) -> Result<(), GoldFishError> {
+        self.history = None;
+        self.tt = None;
         Ok(())
     }
 
@@ -258,21 +264,21 @@ mod tests {
             .unwrap();
         assert_eq!(gs.turn, Color::White);
         assert_eq!(
-            gs.board.get(Coordinate::new_coordinate(0, 0)),
+            gs.board.get(Coordinate::new(0, 0)),
             (Square::Occupied {
                 color: Color::White,
                 piece: PieceType::Rook
             })
         );
         assert_eq!(
-            gs.board.get(Coordinate::new_coordinate(4, 0)),
+            gs.board.get(Coordinate::new(4, 0)),
             (Square::Occupied {
                 color: Color::White,
                 piece: PieceType::King
             })
         );
         assert_eq!(
-            gs.board.get(Coordinate::new_coordinate(4, 7)),
+            gs.board.get(Coordinate::new(4, 7)),
             (Square::Occupied {
                 color: Color::Black,
                 piece: PieceType::King
@@ -295,8 +301,8 @@ mod tests {
             GameState::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
                 .unwrap();
         let m = parse_algebraic(&mut gs, "e2e4").unwrap();
-        assert_eq!(m.from, Coordinate::new_coordinate(4, 1));
-        assert_eq!(m.to, Coordinate::new_coordinate(4, 3));
+        assert_eq!(m.from, Coordinate::new(4, 1));
+        assert_eq!(m.to, Coordinate::new(4, 3));
     }
 
     #[test]
@@ -317,16 +323,13 @@ mod tests {
         let m = parse_algebraic(&mut gs, "e2e4").unwrap();
         gs.make_move(m);
         assert_eq!(
-            gs.board.get(Coordinate::new_coordinate(4, 3)),
+            gs.board.get(Coordinate::new(4, 3)),
             (Square::Occupied {
                 color: Color::White,
                 piece: PieceType::Pawn
             })
         );
-        assert_eq!(
-            gs.board.get(Coordinate::new_coordinate(4, 1)),
-            Square::Empty
-        );
+        assert_eq!(gs.board.get(Coordinate::new(4, 1)), Square::Empty);
         assert_eq!(gs.turn, Color::Black);
     }
 
@@ -338,7 +341,7 @@ mod tests {
         let m = parse_algebraic(&mut gs, "g1f3").unwrap();
         gs.make_move(m);
         assert_eq!(
-            gs.board.get(Coordinate::new_coordinate(5, 2)),
+            gs.board.get(Coordinate::new(5, 2)),
             (Square::Occupied {
                 color: Color::White,
                 piece: PieceType::Knight
@@ -359,16 +362,13 @@ mod tests {
         assert!(m.en_passant);
         gs.make_move(m);
         assert_eq!(
-            gs.board.get(Coordinate::new_coordinate(5, 5)),
+            gs.board.get(Coordinate::new(5, 5)),
             (Square::Occupied {
                 color: Color::White,
                 piece: PieceType::Pawn
             })
         );
-        assert_eq!(
-            gs.board.get(Coordinate::new_coordinate(5, 4)),
-            Square::Empty
-        );
+        assert_eq!(gs.board.get(Coordinate::new(5, 4)), Square::Empty);
     }
 
     #[test]
@@ -377,8 +377,8 @@ mod tests {
         // Position: K on e1, rooks on d1 and a5, black K on e8
         let gs = GameState::from_fen("4k3/8/8/R2b4/8/8/8/3RK3 w - - 0 1").unwrap();
         let m = Move {
-            from: Coordinate::new_coordinate(3, 0),
-            to: Coordinate::new_coordinate(3, 4),
+            from: Coordinate::new(3, 0),
+            to: Coordinate::new(3, 4),
             promotion: None,
             en_passant: false,
             captured: Some(PieceType::Bishop),

@@ -1,4 +1,3 @@
-use std::cmp::max;
 use crate::{
     GameState,
     game::MoveGenMode,
@@ -11,6 +10,7 @@ use crate::{
     transposition::Bound,
     types::Color,
 };
+use std::cmp::max;
 
 pub fn quiescence(
     gs: &mut GameState,

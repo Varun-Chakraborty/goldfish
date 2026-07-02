@@ -21,6 +21,7 @@ pub use crate::{
 };
 
 pub enum EngineCommand {
+    NewGame,
     Init {
         fen: String,
         moves: Option<Vec<String>>,
@@ -70,7 +71,7 @@ impl EngineWorker {
         stop: Arc<AtomicBool>,
         ponderhit: Arc<AtomicBool>,
     ) -> Self {
-        let engine = match GoldFish::new_engine() {
+        let engine = match GoldFish::new() {
             Ok(engine) => engine,
             Err(e) => {
                 eprintln!("Error creating engine: {e}");
@@ -102,6 +103,11 @@ impl EngineWorker {
                                     break;
                                 }
                             }
+                        }
+                    }
+                    EngineCommand::NewGame => {
+                        if let Err(e) = self.engine.new_game() {
+                            eprintln!("New game error: {e}");
                         }
                     }
                     EngineCommand::SetOption { name, value } => {

@@ -180,7 +180,7 @@ impl Square {
 pub struct Coordinate(u8, u8);
 
 impl Coordinate {
-    pub fn new_coordinate(f: u8, r: u8) -> Self {
+    pub fn new(f: u8, r: u8) -> Self {
         Coordinate(f, r)
     }
 
@@ -197,7 +197,7 @@ impl Coordinate {
     }
 
     pub fn from_idx(idx: usize) -> Self {
-        Coordinate::new_coordinate((idx % 8) as u8, (idx / 8) as u8)
+        Coordinate::new((idx % 8) as u8, (idx / 8) as u8)
     }
 
     pub fn from_algebraic(s: &str) -> Option<Self> {
@@ -217,7 +217,7 @@ impl Coordinate {
             return None;
         }
 
-        Some(Coordinate::new_coordinate(file, (rank - 1) as u8))
+        Some(Coordinate::new(file, (rank - 1) as u8))
     }
 
     pub fn to_algebraic(self) -> String {
@@ -241,7 +241,7 @@ impl Coordinate {
         if !(0..8).contains(&f) || !(0..8).contains(&r) {
             None
         } else {
-            Some(Coordinate::new_coordinate(f as u8, r as u8))
+            Some(Coordinate::new(f as u8, r as u8))
         }
     }
 }

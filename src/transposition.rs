@@ -34,7 +34,7 @@ pub struct TranspositionTable {
 }
 
 impl TranspositionTable {
-    pub fn new_table(size_mb: usize) -> Self {
+    pub fn new(size_mb: usize) -> Self {
         let size_of_entry = std::mem::size_of::<TTEntry>();
         let cell_count = size_mb * 1024 * 1024 / size_of_entry;
 

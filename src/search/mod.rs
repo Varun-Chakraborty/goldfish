@@ -44,7 +44,7 @@ pub fn iterative_deepening<F>(
 ) where
     F: FnMut(EngineEvent),
 {
-    let tt = tt.get_or_insert_with(|| TranspositionTable::new_table(64));
+    let tt = tt.get_or_insert_with(|| TranspositionTable::new(64));
     let history_heuristics = history.get_or_insert_with(HistoryHeuristic::new);
     let mut pv_table = PVTable::new();
     pv_table.table[0][0] = gs.legal_moves(MoveGenMode::All).get(0).copied();

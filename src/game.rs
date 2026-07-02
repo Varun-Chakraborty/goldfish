@@ -640,15 +640,18 @@ impl GameState {
                         }
                         _ => {}
                     }
-
-                    if self.en_passant == Some(to) {
-                        let m = Move::new_en_passant(from, to);
-                        let undo = self.make_move(m);
-                        if !self.in_check(color) {
-                            moves.push(m);
-                        }
-                        self.unmake_move(undo);
+                }
+                if self.en_passant == Some(to)
+                    && target_squares
+                        .as_ref()
+                        .is_none_or(|sqrs| sqrs.contains(&Coordinate::new(to.file(), from.rank())))
+                {
+                    let m = Move::new_en_passant(from, to);
+                    let undo = self.make_move(m);
+                    if !self.in_check(color) {
+                        moves.push(m);
                     }
+                    self.unmake_move(undo);
                 }
             }
         }
@@ -677,15 +680,18 @@ impl GameState {
                         }
                         _ => {}
                     }
-
-                    if self.en_passant == Some(to) {
-                        let m = Move::new_en_passant(from, to);
-                        let undo = self.make_move(m);
-                        if !self.in_check(color) {
-                            moves.push(m);
-                        }
-                        self.unmake_move(undo);
+                }
+                if self.en_passant == Some(to)
+                    && target_squares
+                        .as_ref()
+                        .is_none_or(|sqrs| sqrs.contains(&Coordinate::new(to.file(), from.rank())))
+                {
+                    let m = Move::new_en_passant(from, to);
+                    let undo = self.make_move(m);
+                    if !self.in_check(color) {
+                        moves.push(m);
                     }
+                    self.unmake_move(undo);
                 }
             }
         }
@@ -819,7 +825,7 @@ impl GameState {
                     continue;
                 }
                 if let Some(to) = from.checked_offset(df, dr) {
-                    let prohibited = checks.iter().flatten().any(|(c, _)| c != &to)
+                    let prohibited = !checks.iter().flatten().any(|(c, _)| c == &to)
                         && (df == dr
                             && checks
                                 .iter()
@@ -876,13 +882,10 @@ impl GameState {
         };
 
         if self.can_castle_kingside(color) {
-            let king_sq = Coordinate::new_coordinate(4, rank);
-            let between_empty = [
-                Coordinate::new_coordinate(5, rank),
-                Coordinate::new_coordinate(6, rank),
-            ];
+            let king_sq = Coordinate::new(4, rank);
+            let between_empty = [Coordinate::new(5, rank), Coordinate::new(6, rank)];
             if from == king_sq
-                && self.board.get(Coordinate::new_coordinate(7, rank))
+                && self.board.get(Coordinate::new(7, rank))
                     == (Square::Occupied {
                         color,
                         piece: PieceType::Rook,
@@ -891,47 +894,32 @@ impl GameState {
                     .iter()
                     .all(|&c| self.board.get(c) == Square::Empty)
                 && !self
-                    .lva(
-                        Coordinate::new_coordinate(4, rank),
-                        color.opponent(),
-                        None,
-                        None,
-                    )
+                    .lva(Coordinate::new(4, rank), color.opponent(), None, None)
                     .is_some()
                 && !self
-                    .lva(
-                        Coordinate::new_coordinate(5, rank),
-                        color.opponent(),
-                        None,
-                        None,
-                    )
+                    .lva(Coordinate::new(5, rank), color.opponent(), None, None)
                     .is_some()
                 && !self
-                    .lva(
-                        Coordinate::new_coordinate(6, rank),
-                        color.opponent(),
-                        None,
-                        None,
-                    )
+                    .lva(Coordinate::new(6, rank), color.opponent(), None, None)
                     .is_some()
             {
                 moves.push(Move::new_castle(
                     from,
-                    Coordinate::new_coordinate(6, rank),
+                    Coordinate::new(6, rank),
                     CastleSide::Kingside,
                 ));
             }
         }
 
         if self.can_castle_queenside(color) {
-            let king_sq = Coordinate::new_coordinate(4, rank);
+            let king_sq = Coordinate::new(4, rank);
             let between_empty = [
-                Coordinate::new_coordinate(1, rank),
-                Coordinate::new_coordinate(2, rank),
-                Coordinate::new_coordinate(3, rank),
+                Coordinate::new(1, rank),
+                Coordinate::new(2, rank),
+                Coordinate::new(3, rank),
             ];
             if from == king_sq
-                && self.board.get(Coordinate::new_coordinate(0, rank))
+                && self.board.get(Coordinate::new(0, rank))
                     == (Square::Occupied {
                         color,
                         piece: PieceType::Rook,
@@ -940,33 +928,18 @@ impl GameState {
                     .iter()
                     .all(|&c| self.board.get(c) == Square::Empty)
                 && !self
-                    .lva(
-                        Coordinate::new_coordinate(4, rank),
-                        color.opponent(),
-                        None,
-                        None,
-                    )
+                    .lva(Coordinate::new(4, rank), color.opponent(), None, None)
                     .is_some()
                 && !self
-                    .lva(
-                        Coordinate::new_coordinate(3, rank),
-                        color.opponent(),
-                        None,
-                        None,
-                    )
+                    .lva(Coordinate::new(3, rank), color.opponent(), None, None)
                     .is_some()
                 && !self
-                    .lva(
-                        Coordinate::new_coordinate(2, rank),
-                        color.opponent(),
-                        None,
-                        None,
-                    )
+                    .lva(Coordinate::new(2, rank), color.opponent(), None, None)
                     .is_some()
             {
                 moves.push(Move::new_castle(
                     from,
-                    Coordinate::new_coordinate(2, rank),
+                    Coordinate::new(2, rank),
                     CastleSide::Queenside,
                 ));
             }
@@ -1058,62 +1031,58 @@ impl GameState {
 
     fn apply_kingside_castle(&mut self, us: Color, rank: u8) {
         match us {
-            Color::White => self.kings.0 = Coordinate::new_coordinate(6, 0),
-            Color::Black => self.kings.1 = Coordinate::new_coordinate(6, 7),
+            Color::White => self.kings.0 = Coordinate::new(6, 0),
+            Color::Black => self.kings.1 = Coordinate::new(6, 7),
         }
-        self.board
-            .set(Coordinate::new_coordinate(4, rank), Square::Empty);
-        self.zobrist ^= get_piece_sq(PieceType::King, us, Coordinate::new_coordinate(4, rank));
-        self.board
-            .set(Coordinate::new_coordinate(7, rank), Square::Empty);
-        self.zobrist ^= get_piece_sq(PieceType::Rook, us, Coordinate::new_coordinate(7, rank));
+        self.board.set(Coordinate::new(4, rank), Square::Empty);
+        self.zobrist ^= get_piece_sq(PieceType::King, us, Coordinate::new(4, rank));
+        self.board.set(Coordinate::new(7, rank), Square::Empty);
+        self.zobrist ^= get_piece_sq(PieceType::Rook, us, Coordinate::new(7, rank));
 
         self.board.set(
-            Coordinate::new_coordinate(6, rank),
+            Coordinate::new(6, rank),
             Square::Occupied {
                 color: us,
                 piece: PieceType::King,
             },
         );
-        self.zobrist ^= get_piece_sq(PieceType::King, us, Coordinate::new_coordinate(6, rank));
+        self.zobrist ^= get_piece_sq(PieceType::King, us, Coordinate::new(6, rank));
         self.board.set(
-            Coordinate::new_coordinate(5, rank),
+            Coordinate::new(5, rank),
             Square::Occupied {
                 color: us,
                 piece: PieceType::Rook,
             },
         );
-        self.zobrist ^= get_piece_sq(PieceType::Rook, us, Coordinate::new_coordinate(5, rank));
+        self.zobrist ^= get_piece_sq(PieceType::Rook, us, Coordinate::new(5, rank));
     }
 
     fn apply_queenside_castle(&mut self, us: Color, rank: u8) {
         match us {
-            Color::White => self.kings.0 = Coordinate::new_coordinate(2, 0),
-            Color::Black => self.kings.1 = Coordinate::new_coordinate(2, 7),
+            Color::White => self.kings.0 = Coordinate::new(2, 0),
+            Color::Black => self.kings.1 = Coordinate::new(2, 7),
         }
-        self.board
-            .set(Coordinate::new_coordinate(4, rank), Square::Empty);
-        self.zobrist ^= get_piece_sq(PieceType::King, us, Coordinate::new_coordinate(4, rank));
-        self.board
-            .set(Coordinate::new_coordinate(0, rank), Square::Empty);
-        self.zobrist ^= get_piece_sq(PieceType::Rook, us, Coordinate::new_coordinate(0, rank));
+        self.board.set(Coordinate::new(4, rank), Square::Empty);
+        self.zobrist ^= get_piece_sq(PieceType::King, us, Coordinate::new(4, rank));
+        self.board.set(Coordinate::new(0, rank), Square::Empty);
+        self.zobrist ^= get_piece_sq(PieceType::Rook, us, Coordinate::new(0, rank));
 
         self.board.set(
-            Coordinate::new_coordinate(2, rank),
+            Coordinate::new(2, rank),
             Square::Occupied {
                 color: us,
                 piece: PieceType::King,
             },
         );
-        self.zobrist ^= get_piece_sq(PieceType::King, us, Coordinate::new_coordinate(2, rank));
+        self.zobrist ^= get_piece_sq(PieceType::King, us, Coordinate::new(2, rank));
         self.board.set(
-            Coordinate::new_coordinate(3, rank),
+            Coordinate::new(3, rank),
             Square::Occupied {
                 color: us,
                 piece: PieceType::Rook,
             },
         );
-        self.zobrist ^= get_piece_sq(PieceType::Rook, us, Coordinate::new_coordinate(3, rank));
+        self.zobrist ^= get_piece_sq(PieceType::Rook, us, Coordinate::new(3, rank));
     }
 
     pub fn make_move(&mut self, m: Move) -> Undo {
@@ -1164,7 +1133,7 @@ impl GameState {
         let is_capture = match m.captured {
             Some(piece) => {
                 let coord = if m.en_passant {
-                    Coordinate::new_coordinate(m.to.file(), m.from.rank())
+                    Coordinate::new(m.to.file(), m.from.rank())
                 } else {
                     m.to
                 };
@@ -1204,7 +1173,7 @@ impl GameState {
         if is_pawn_move {
             let dir = m.to.rank() as i8 - m.from.rank() as i8;
             if dir.abs() == 2 {
-                self.en_passant = Some(Coordinate::new_coordinate(
+                self.en_passant = Some(Coordinate::new(
                     m.from.file(),
                     (m.from.rank() as i8 + dir.signum()) as u8,
                 ));
@@ -1231,7 +1200,7 @@ impl GameState {
                 Color::White => 0,
                 Color::Black => 7,
             };
-            if m.from == Coordinate::new_coordinate(0, rank) {
+            if m.from == Coordinate::new(0, rank) {
                 if self.can_castle_queenside(us) {
                     self.zobrist ^= get_castling_rights(us, CastleSide::Queenside);
                 }
@@ -1240,7 +1209,7 @@ impl GameState {
                     Color::Black => self.castling_rights.queenside_black = false,
                 }
             }
-            if m.from == Coordinate::new_coordinate(7, rank) {
+            if m.from == Coordinate::new(7, rank) {
                 if self.can_castle_kingside(us) {
                     self.zobrist ^= get_castling_rights(us, CastleSide::Kingside);
                 }
@@ -1281,22 +1250,20 @@ impl GameState {
 
     fn unapply_kingside_castle(&mut self, us: Color, rank: u8) {
         match us {
-            Color::White => self.kings.0 = Coordinate::new_coordinate(4, 0),
-            Color::Black => self.kings.1 = Coordinate::new_coordinate(4, 7),
+            Color::White => self.kings.0 = Coordinate::new(4, 0),
+            Color::Black => self.kings.1 = Coordinate::new(4, 7),
         }
-        self.board
-            .set(Coordinate::new_coordinate(6, rank), Square::Empty);
-        self.board
-            .set(Coordinate::new_coordinate(5, rank), Square::Empty);
+        self.board.set(Coordinate::new(6, rank), Square::Empty);
+        self.board.set(Coordinate::new(5, rank), Square::Empty);
         self.board.set(
-            Coordinate::new_coordinate(4, rank),
+            Coordinate::new(4, rank),
             Square::Occupied {
                 color: us,
                 piece: PieceType::King,
             },
         );
         self.board.set(
-            Coordinate::new_coordinate(7, rank),
+            Coordinate::new(7, rank),
             Square::Occupied {
                 color: us,
                 piece: PieceType::Rook,
@@ -1306,22 +1273,20 @@ impl GameState {
 
     fn unapply_queenside_castle(&mut self, us: Color, rank: u8) {
         match us {
-            Color::White => self.kings.0 = Coordinate::new_coordinate(4, 0),
-            Color::Black => self.kings.1 = Coordinate::new_coordinate(4, 7),
+            Color::White => self.kings.0 = Coordinate::new(4, 0),
+            Color::Black => self.kings.1 = Coordinate::new(4, 7),
         }
-        self.board
-            .set(Coordinate::new_coordinate(2, rank), Square::Empty);
-        self.board
-            .set(Coordinate::new_coordinate(3, rank), Square::Empty);
+        self.board.set(Coordinate::new(2, rank), Square::Empty);
+        self.board.set(Coordinate::new(3, rank), Square::Empty);
         self.board.set(
-            Coordinate::new_coordinate(4, rank),
+            Coordinate::new(4, rank),
             Square::Occupied {
                 color: us,
                 piece: PieceType::King,
             },
         );
         self.board.set(
-            Coordinate::new_coordinate(0, rank),
+            Coordinate::new(0, rank),
             Square::Occupied {
                 color: us,
                 piece: PieceType::Rook,
@@ -1398,7 +1363,7 @@ impl GameState {
 
         if let Some(piece) = m.captured {
             let coord = if m.en_passant {
-                Coordinate::new_coordinate(m.to.file(), m.from.rank())
+                Coordinate::new(m.to.file(), m.from.rank())
             } else {
                 m.to
             };
@@ -1419,7 +1384,7 @@ impl GameState {
             for j in 0..8 {
                 repr += &format!(
                     "{}",
-                    match self.board.get(Coordinate::new_coordinate(j, i)) {
+                    match self.board.get(Coordinate::new(j, i)) {
                         Square::Empty => " . ".to_string(),
                         Square::Occupied { color, piece } => {
                             let p = match piece {
@@ -1453,12 +1418,13 @@ mod tests {
         game::{
             Direction::{Horizontal, LeftDiagonal, RightDiagonal, Vertical},
             GameState,
+            MoveGenMode::All,
         },
         notation::parse_algebraic,
         types::{
             Color::{Black, White},
-            Coordinate,
-            PieceType::{Bishop, Knight, Pawn, Queen, Rook},
+            Coordinate, Move,
+            PieceType::{Bishop, King, Knight, Pawn, Queen, Rook},
         },
     };
 
@@ -1477,6 +1443,19 @@ mod tests {
             gs.to_fen(),
             "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
         );
+    }
+
+    #[test]
+    fn test_legal_moves() {
+        let mut gs =
+            GameState::from_fen("4k2r/1p3ppp/p7/2bPp3/5B2/5P2/PP4PP/R2nRrK1 w - - 10 38").unwrap();
+        let moves = gs.legal_moves(All);
+        assert!(moves.contains(&Move::new_capture(
+            Coordinate::new(6, 0),
+            Coordinate::new(5, 0),
+            King,
+            Rook
+        )));
     }
 
     #[test]
@@ -1695,7 +1674,7 @@ mod tests {
     fn test_pinned_direction1() {
         let gs = GameState::from_fen("7k/8/8/4r3/8/8/8/QK6 b - - 0 1").unwrap();
         let pin_map = gs.compute_pins();
-        let pinned = pin_map.get(Coordinate::new_coordinate(4, 4));
+        let pinned = pin_map.get(Coordinate::new(4, 4));
         println!("{:?}", pinned);
         assert!(pinned.is_some_and(|dir| dir == RightDiagonal));
     }
@@ -1704,7 +1683,7 @@ mod tests {
     fn test_pinned_direction2() {
         let gs = GameState::from_fen("k7/8/8/3r4/8/8/8/6KQ b - - 0 1").unwrap();
         let pin_map = gs.compute_pins();
-        let pinned = pin_map.get(Coordinate::new_coordinate(3, 4));
+        let pinned = pin_map.get(Coordinate::new(3, 4));
         println!("{:?}", pinned);
         assert!(pinned.is_some_and(|dir| dir == LeftDiagonal));
     }
@@ -1713,7 +1692,7 @@ mod tests {
     fn test_pinned_direction3() {
         let gs = GameState::from_fen("7k/8/8/7r/8/8/8/6KQ b - - 0 1").unwrap();
         let pin_map = gs.compute_pins();
-        let pinned = pin_map.get(Coordinate::new_coordinate(7, 4));
+        let pinned = pin_map.get(Coordinate::new(7, 4));
         println!("{:?}", pinned);
         assert!(pinned.is_some_and(|dir| dir == Vertical));
     }
@@ -1722,7 +1701,7 @@ mod tests {
     fn test_pinned_direction4() {
         let gs = GameState::from_fen("KQ3r1k/8/8/8/8/8/8/8 b - - 0 1").unwrap();
         let pin_map = gs.compute_pins();
-        let pinned = pin_map.get(Coordinate::new_coordinate(5, 7));
+        let pinned = pin_map.get(Coordinate::new(5, 7));
         println!("{:?}", pinned);
         assert!(pinned.is_some_and(|dir| dir == Horizontal));
     }

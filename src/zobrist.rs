@@ -13,7 +13,7 @@ pub struct Zobrist {
 }
 
 impl Zobrist {
-    fn new_zobrist() -> Self {
+    fn new() -> Self {
         let mut rng = StdRng::seed_from_u64(0xCAFEBABE);
 
         let mut piece_sq = [[0; 64]; 12];
@@ -44,7 +44,7 @@ impl Zobrist {
     }
 }
 
-static ZOBRIST: LazyLock<Zobrist> = LazyLock::new(Zobrist::new_zobrist);
+static ZOBRIST: LazyLock<Zobrist> = LazyLock::new(Zobrist::new);
 
 pub fn get_piece_sq(piece: PieceType, color: Color, coord: Coordinate) -> u64 {
     let piece_index = match (piece, color) {

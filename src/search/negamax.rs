@@ -1,4 +1,3 @@
-use std::cmp::max;
 use crate::{
     GameState,
     position::{
@@ -18,6 +17,7 @@ use crate::{
     transposition::{Bound, TTEntry},
     types::Move,
 };
+use std::cmp::max;
 
 pub fn negamax(
     gs: &mut GameState,
