@@ -7,6 +7,7 @@ use std::{
 };
 
 use crate::{
+    clock::Budget,
     history::HistoryHeuristic,
     search::MAX_PLY,
     transposition::{TTStats, TranspositionTable},
@@ -45,15 +46,39 @@ pub struct SearchContext<'a> {
     pub ponderhit: &'a Arc<AtomicBool>,
     pub history_heuristics: &'a mut HistoryHeuristic,
     pub start_time: Instant,
+    pub budget: Option<Budget>,
     pub node_limit: Option<u64>,
 }
 
 impl<'a> SearchContext<'a> {
     #[inline]
-    pub fn should_stop(&self) -> bool {
+    pub fn should_stop(&mut self) -> bool {
         if (self.search_stats.search_counters.nodes + self.qsearch_stats.nodes).is_multiple_of(2048)
         {
-            return self.stop.load(Ordering::Relaxed);
+            if self.stop.load(Ordering::Relaxed) {
+                return true;
+            }
+            if !self.ponder {
+                let elapsed = self.start_time.elapsed().as_millis();
+                if self
+                    .budget
+                    .as_ref()
+                    .is_some_and(|b| elapsed >= b.hard_limit)
+                {
+                    return true;
+                } else if self
+                    .node_limit
+                    .is_some_and(|node_limit| self.search_stats.search_counters.nodes > node_limit)
+                {
+                    return true;
+                }
+            } else {
+                if self.ponderhit.load(Ordering::Relaxed) {
+                    self.start_time = Instant::now();
+                    self.ponder = false;
+                }
+            }
+            return false;
         }
 
         false

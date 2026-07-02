@@ -7,6 +7,7 @@ use thiserror::Error;
 
 use crate::{
     EngineEvent, EngineLimits, GameState,
+    clock::Clock,
     game::{GameStateError, MoveGenMode::All},
     history::HistoryHeuristic,
     notation::parse_algebraic,
@@ -30,6 +31,7 @@ pub struct GoldFish {
     gamestate: GameState,
     tt: Option<TranspositionTable>,
     history: Option<HistoryHeuristic>,
+    clock: Clock,
 }
 
 impl GoldFish {
@@ -38,6 +40,7 @@ impl GoldFish {
             gamestate: GameState::from_fen(STARTPOS)?,
             tt: None,
             history: None,
+            clock: Clock::default(),
         })
     }
 
@@ -70,6 +73,7 @@ impl GoldFish {
         F: FnMut(EngineEvent),
     {
         let gs = &mut self.gamestate;
+        self.clock.load_clock(gs.turn, &limits);
         iterative_deepening(
             gs,
             limits,
@@ -77,6 +81,7 @@ impl GoldFish {
             ponderhit,
             &mut self.tt,
             &mut self.history,
+            &mut self.clock,
             callback,
         );
         Ok(())

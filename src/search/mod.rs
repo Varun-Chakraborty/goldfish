@@ -14,6 +14,7 @@ use std::{
 
 use crate::{
     EngineEvent,
+    clock::Clock,
     game::{GameState, MoveGenMode},
     history::HistoryHeuristic,
     search::{
@@ -38,6 +39,7 @@ pub fn iterative_deepening<F>(
     ponderhit: &Arc<AtomicBool>,
     tt: &mut Option<TranspositionTable>,
     history: &mut Option<HistoryHeuristic>,
+    clock: &mut Clock,
     mut callback: F,
 ) where
     F: FnMut(EngineEvent),
@@ -62,6 +64,7 @@ pub fn iterative_deepening<F>(
         pv_table: &mut pv_table,
         history_heuristics,
         start_time: start,
+        budget: clock.calculate_allocated_time(),
         ponder: limits.ponder,
         node_limit: limits.nodes,
     };
@@ -70,7 +73,11 @@ pub fn iterative_deepening<F>(
 
         let result = negamax(gs, depth, 0, -MATE, MATE, &pv, true, FullSearch, &mut ctx);
 
-        if ctx.stopped || stop.load(Ordering::Relaxed) {
+        let elapsed = ctx.start_time.elapsed().as_millis();
+        if ctx.stopped
+            || stop.load(Ordering::Relaxed)
+            || (!ctx.ponder && ctx.budget.as_ref().is_some_and(|b| elapsed >= b.soft_limit))
+        {
             break;
         }
 
