@@ -1,3 +1,4 @@
+use std::cmp::max;
 use crate::{
     GameState,
     game::MoveGenMode,
@@ -19,6 +20,7 @@ pub fn quiescence(
     mut beta: i32,
     ctx: &mut SearchContext,
 ) -> i32 {
+    ctx.seldepth = max(ctx.seldepth, ply);
     ctx.qsearch_stats.nodes += 1;
     if let Some(entry) = ctx.tt.probe(gs.zobrist, ply, None) {
         match entry.bound {

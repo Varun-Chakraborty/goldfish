@@ -55,6 +55,7 @@ pub fn iterative_deepening<F>(
     let start = Instant::now();
 
     let mut ctx = SearchContext {
+        seldepth: 0,
         stopped: false,
         stop,
         ponderhit,
@@ -69,6 +70,7 @@ pub fn iterative_deepening<F>(
         node_limit: limits.nodes,
     };
     loop {
+        ctx.seldepth = 0;
         ctx.stopped = false;
 
         let result = negamax(gs, depth, 0, -MATE, MATE, &pv, true, FullSearch, &mut ctx);
@@ -91,7 +93,7 @@ pub fn iterative_deepening<F>(
 
         callback(EngineEvent::IterationInfo(IterationInfo {
             depth,
-            seldepth: depth,
+            seldepth: ctx.seldepth,
             score: score(result.score),
             raw_score: result.score,
             nodes: ctx.search_stats.search_counters.nodes + ctx.qsearch_stats.nodes,

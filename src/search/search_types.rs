@@ -36,6 +36,7 @@ pub enum SearchType {
 }
 
 pub struct SearchContext<'a> {
+    pub seldepth: u32,
     pub stopped: bool,
     pub qsearch_stats: SearchCounters,
     pub search_stats: SearchStats,

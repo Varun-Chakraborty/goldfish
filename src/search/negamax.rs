@@ -1,3 +1,4 @@
+use std::cmp::max;
 use crate::{
     GameState,
     position::{
@@ -29,6 +30,7 @@ pub fn negamax(
     search_type: SearchType,
     ctx: &mut SearchContext,
 ) -> SearchResult {
+    ctx.seldepth = max(ctx.seldepth, ply);
     let org_alpha = alpha;
     ctx.search_stats.search_counters.nodes += 1;
 
