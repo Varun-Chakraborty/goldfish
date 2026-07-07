@@ -1,4 +1,5 @@
 use crate::{EngineLimits, types::Color};
+use std::cmp::min;
 
 #[derive(Default)]
 pub struct Clock {
@@ -10,6 +11,7 @@ pub struct Clock {
     movetime: Option<u128>,
 }
 
+#[derive(Debug)]
 pub struct Budget {
     pub soft_limit: u128,
     pub hard_limit: u128,
@@ -52,7 +54,7 @@ impl Clock {
                 let allocated_time = (base + inc) * 8 / 10;
                 Some(Budget {
                     soft_limit: allocated_time,
-                    hard_limit: allocated_time * 5 / 4,
+                    hard_limit: min(allocated_time * 5 / 4, remaining - 50),
                 })
             } else {
                 None

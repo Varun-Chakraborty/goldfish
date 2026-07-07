@@ -13,19 +13,14 @@ use std::{
 };
 
 use crate::{
-    EngineEvent,
-    clock::Clock,
-    game::{GameState, MoveGenMode},
-    history::HistoryHeuristic,
-    search::{
+    EngineEvent, clock::Clock, game::{GameState, MoveGenMode}, history::HistoryHeuristic, search::{
         negamax::negamax,
         quiescence::quiescence,
         search_types::{
             EngineLimits, IterationInfo, PVTable, Score, SearchContext, SearchCounters,
             SearchStats, SearchType::FullSearch,
         },
-    },
-    transposition::TranspositionTable,
+    }, transposition::TranspositionTable, types::Move,
 };
 
 pub const MATE: i32 = 32000;
@@ -41,7 +36,7 @@ pub fn iterative_deepening<F>(
     history: &mut Option<HistoryHeuristic>,
     clock: &mut Clock,
     mut callback: F,
-) where
+) -> (Option<Move>, Option<Move>) where
     F: FnMut(EngineEvent),
 {
     let tt = tt.get_or_insert_with(|| TranspositionTable::new(64));
@@ -123,7 +118,8 @@ pub fn iterative_deepening<F>(
 
     let best_move = pv.as_ref().and_then(|pv| pv.get(0).copied());
     let ponder = pv.as_ref().and_then(|pv| pv.get(1).copied());
-    callback(EngineEvent::SearchFinished { best_move, ponder });
+
+    (best_move, ponder)
 }
 
 fn score(score: i32) -> Score {

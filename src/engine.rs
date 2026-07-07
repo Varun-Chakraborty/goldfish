@@ -11,6 +11,7 @@ use crate::{
     game::{GameStateError, MoveGenMode::All},
     history::HistoryHeuristic,
     notation::parse_algebraic,
+    opening_book::{OpeningBook, OpeningBookError},
     position::{Position, PositionStatus},
     search::iterative_deepening,
     transposition::TranspositionTable,
@@ -23,6 +24,8 @@ pub enum GoldFishError {
     GameStateError(#[from] GameStateError),
     #[error("Invalid move: {0}")]
     InvalidMove(String),
+    #[error("OpeningBookError: {0}")]
+    OpeningBook(#[from] OpeningBookError),
 }
 
 const STARTPOS: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -32,6 +35,8 @@ pub struct GoldFish {
     tt: Option<TranspositionTable>,
     history: Option<HistoryHeuristic>,
     clock: Clock,
+    book: Option<OpeningBook>,
+    ownbook: bool,
 }
 
 impl GoldFish {
@@ -40,18 +45,37 @@ impl GoldFish {
             gamestate: GameState::from_fen(STARTPOS)?,
             tt: None,
             history: None,
+            book: None,
             clock: Clock::default(),
+            ownbook: false,
         })
     }
 
-    pub fn set_option(&mut self, name: &str, value: &str) {
+    pub fn set_option(&mut self, name: &str, value: &str) -> Result<(), GoldFishError> {
         match name {
             "Hash" => {
                 let hash = value.parse().unwrap();
                 self.tt = Some(TranspositionTable::new(hash));
             }
+            "OwnBook" => {
+                if let None = self.book {
+                    println!("No book loaded");
+                    return Ok(());
+                }
+                self.ownbook = value == "true";
+            },
+            "BookFile" => {
+                if value.is_empty() {
+                    self.book = None;
+                    self.ownbook = false;
+                    return Ok(());
+                }
+                self.book = Some(OpeningBook::new(value)?);
+            },
             _ => {}
         }
+
+        Ok(())
     }
 
     pub fn new_position_from_fen(&mut self, fen: &str) -> Result<(), GoldFishError> {
@@ -70,17 +94,51 @@ impl GoldFish {
 
     pub fn search<F>(
         &mut self,
-        limits: EngineLimits,
+        mut limits: EngineLimits,
         stop: &Arc<AtomicBool>,
         ponderhit: &Arc<AtomicBool>,
-        callback: F,
+        mut callback: F,
     ) -> Result<(), GoldFishError>
     where
         F: FnMut(EngineEvent),
     {
         let gs = &mut self.gamestate;
+        if self.ownbook && let Some(book) = &self.book {
+            let legal_moves = gs.legal_moves(All);
+            let m = book.choose(gs.zobrist, &legal_moves);
+
+            if let Some(best_move) = m {
+                let undo = gs.make_move(best_move);
+                let legal_moves = gs.legal_moves(All);
+                let pondering = limits.ponder;
+                let ponder = book.choose(gs.zobrist, &legal_moves).or_else(|| {
+                    limits.movetime = Some(50);
+                    self.clock.load_clock(gs.turn, &limits);
+                    let (best_move, _) = iterative_deepening(
+                        gs,
+                        limits,
+                        stop,
+                        ponderhit,
+                        &mut self.tt,
+                        &mut self.history,
+                        &mut self.clock,
+                        |_| (),
+                    );
+
+                    best_move
+                });
+                gs.unmake_move(undo);
+
+                while pondering && !ponderhit.load(std::sync::atomic::Ordering::Relaxed) && !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                    std::thread::sleep(std::time::Duration::from_millis(2));
+                }
+
+                callback(EngineEvent::SearchFinished { best_move: Some(best_move), ponder });
+                return Ok(());
+            }
+        }
         self.clock.load_clock(gs.turn, &limits);
-        iterative_deepening(
+        let (best_move, ponder) = iterative_deepening(
             gs,
             limits,
             stop,
@@ -88,8 +146,10 @@ impl GoldFish {
             &mut self.tt,
             &mut self.history,
             &mut self.clock,
-            callback,
+            &mut callback,
         );
+
+        callback(EngineEvent::SearchFinished { best_move, ponder });
         Ok(())
     }
 

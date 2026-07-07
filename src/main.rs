@@ -64,6 +64,8 @@ fn main() {
                             println!();
                             println!("option name Hash type spin default 64 min 0 max 1048576");
                             println!("option name Ponder type check default true");
+                            println!("option name OwnBook type check default false");
+                            println!("option name BookFile type string default ");
                             println!("uciok");
                         }
                         Some("ucinewgame") => {
@@ -247,19 +249,21 @@ fn main() {
                         Some("ponderhit") => ponderhit.store(true, Ordering::Relaxed),
                         Some("setoption") => {
                             let mut name = vec![];
-                            while let Some(arg) = args.next()
-                                && arg != "value"
-                            {
-                                name.push(arg);
-                            }
-                            let value: String = args.collect();
-                            let name = name.join(" ");
-                            if !name.is_empty()
-                                && !value.is_empty()
-                                && let Err(e) =
-                                    cmd_sender.send(EngineCommand::SetOption { name, value })
-                            {
-                                println!("{e}");
+                            if let Some(arg) = args.next() && arg == "name" {
+                                while let Some(arg) = args.next()
+                                    && arg != "value"
+                                {
+                                    name.push(arg);
+                                }
+                                let value: String = args.collect();
+                                let name = name.join(" ");
+                                if !name.is_empty()
+                                    && !value.is_empty()
+                                    && let Err(e) =
+                                        cmd_sender.send(EngineCommand::SetOption { name, value })
+                                {
+                                    println!("{e}");
+                                }
                             }
                         }
                         Some("d") => {
@@ -296,7 +300,7 @@ fn main() {
                             println!("bestmove {} ponder {}", m.to_algebraic(), p.to_algebraic())
                         }
                         (Some(m), None) => println!("bestmove {}", m.to_algebraic()),
-                        _ => println!("bestmove resign"),
+                        _ => println!("bestmove (none)"),
                     },
                     Debug { string } => println!("{string}"),
                 },

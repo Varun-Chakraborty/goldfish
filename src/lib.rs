@@ -5,6 +5,7 @@ mod eval;
 mod game;
 mod history;
 mod notation;
+mod opening_book;
 mod position;
 mod search;
 mod transposition;
@@ -111,7 +112,9 @@ impl EngineWorker {
                         }
                     }
                     EngineCommand::SetOption { name, value } => {
-                        self.engine.set_option(&name, &value)
+                        if let Err(e) = self.engine.set_option(&name, &value) {
+                            eprintln!("Set option error: {e}");
+                        }
                     }
                     EngineCommand::Start { limits } => {
                         let result =
