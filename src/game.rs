@@ -3,7 +3,11 @@ use std::num::ParseIntError;
 use crate::{
     board::{Board, BoardError},
     game::Direction::{Horizontal, LeftDiagonal, Offset, RightDiagonal, Vertical},
-    types::{CastleSide, CastlingRights, Color, ColorError, Coordinate, Move, PieceType, Square},
+    types::{
+        CastleSide, CastlingRights, Color, ColorError, Coordinate, Move,
+        PieceType::{self, Bishop, Queen, Rook},
+        Square,
+    },
     zobrist::{castling_hash, compute_hash, ep_hash, piece_sq_hash, side_hash},
 };
 use thiserror::Error;
@@ -301,6 +305,75 @@ impl GameState {
         }
     }
 
+    pub fn knight_squares<F>(&self, from: Coordinate, direction: Option<Direction>, mut callback: F)
+    where
+        F: FnMut(Coordinate, Square),
+    {
+        match direction {
+            Some(Offset) | None => {}
+            _ => return,
+        };
+
+        for &(df, dr) in KNIGHT_OFFSETS {
+            if let Some(to) = from.checked_offset(df, dr) {
+                let sq = self.board.get(to);
+                callback(to, sq);
+            }
+        }
+    }
+
+    pub fn ray_tracing<F>(
+        &self,
+        from: Coordinate,
+        piece: PieceType,
+        direction: Option<Direction>,
+        mut callback: F,
+    ) where
+        F: FnMut(Coordinate, Square),
+    {
+        let directions = match piece {
+            PieceType::Bishop => match direction {
+                None => DIAGONAL,
+                Some(dir) => match dir {
+                    RightDiagonal => RIGHT_DIAGONAL,
+                    LeftDiagonal => LEFT_DIAGONAL,
+                    _ => EMPTY,
+                },
+            },
+            PieceType::Rook => match direction {
+                None => STRAIGHT,
+                Some(dir) => match dir {
+                    Vertical => VERTICAL,
+                    Horizontal => HORIZONTAL,
+                    _ => EMPTY,
+                },
+            },
+            PieceType::Queen => match direction {
+                None => QUEEN,
+                Some(dir) => match dir {
+                    RightDiagonal => RIGHT_DIAGONAL,
+                    LeftDiagonal => LEFT_DIAGONAL,
+                    Horizontal => HORIZONTAL,
+                    Vertical => VERTICAL,
+                    _ => EMPTY,
+                },
+            },
+            _ => unreachable!(),
+        };
+
+        for &(df, dr) in directions {
+            let mut cur = from;
+            while let Some(to) = cur.checked_offset(df, dr) {
+                cur = to;
+                let sq = self.board.get(cur);
+                callback(to, sq);
+                if let Square::Occupied { .. } = sq {
+                    break;
+                }
+            }
+        }
+    }
+
     pub fn lva(
         &self,
         coord: Coordinate,
@@ -341,80 +414,75 @@ impl GameState {
             }
         }
 
-        if dir.as_ref().is_none_or(|&dir| dir == Offset) {
-            for &(df, dr) in KNIGHT_OFFSETS {
-                if let Some(target) = coord.checked_offset(df, dr) {
-                    match self.board.get(target) {
-                        Square::Occupied { color, piece }
-                            if color == by && piece == PieceType::Knight =>
-                        {
-                            if exclusion_list.is_none_or(|e| !e.contains(&target)) {
-                                return Some((target, piece));
-                            }
-                        }
-                        _ => continue,
+        let mut attacker = None;
+
+        self.knight_squares(coord, dir, |coord, sq| match sq {
+            Square::Occupied { color, piece } if color == by && piece == PieceType::Knight => {
+                if exclusion_list.is_none_or(|e| !e.contains(&coord)) {
+                    attacker = Some((coord, piece));
+                }
+            }
+            _ => return,
+        });
+
+        if let Some(attacker) = attacker {
+            return Some(attacker);
+        }
+
+        let mut attacker = None;
+
+        self.ray_tracing(coord, Bishop, dir, |c, sq| match sq {
+            Square::Empty => return,
+            Square::Occupied { color, piece } => match piece {
+                PieceType::Bishop if color == by => {
+                    if exclusion_list.is_none_or(|e| !e.contains(&c)) {
+                        attacker = Some((c, piece));
+                        return;
                     }
                 }
-            }
-        }
-
-        let bishop = match dir.as_ref() {
-            Some(&dir) => match dir {
-                Vertical | Horizontal | Offset => EMPTY,
-                RightDiagonal => RIGHT_DIAGONAL,
-                LeftDiagonal => LEFT_DIAGONAL,
+                _ => return,
             },
-            None => DIAGONAL,
-        };
+        });
 
-        for &(df, dr) in bishop {
-            let mut c = coord;
-            while let Some(next) = c.checked_offset(df, dr) {
-                c = next;
-                let sq = self.board.get(c);
-                match sq {
-                    Square::Empty => continue,
-                    Square::Occupied { color, piece } => match piece {
-                        PieceType::Bishop if color == by => {
-                            if exclusion_list.is_none_or(|e| !e.contains(&c)) {
-                                return Some((c, piece));
-                            }
-                        }
-                        _ => break,
-                    },
-                }
-            }
+        if let Some(attacker) = attacker {
+            return Some(attacker);
         }
 
-        let rook = match dir.as_ref() {
-            Some(&dir) => match dir {
-                RightDiagonal | LeftDiagonal | Offset => EMPTY,
-                Horizontal => HORIZONTAL,
-                Vertical => VERTICAL,
+        self.ray_tracing(coord, Rook, dir, |c, sq| match sq {
+            Square::Empty => return,
+            Square::Occupied { color, piece } => match piece {
+                PieceType::Rook if color == by => {
+                    if exclusion_list.is_none_or(|e| !e.contains(&c)) {
+                        attacker = Some((c, piece));
+                        return;
+                    }
+                }
+                _ => return,
             },
-            None => STRAIGHT,
-        };
+        });
 
-        for &(df, dr) in rook {
-            let mut c = coord;
-            while let Some(next) = c.checked_offset(df, dr) {
-                c = next;
-                let sq = self.board.get(c);
-                match sq {
-                    Square::Empty => continue,
-                    Square::Occupied { color, piece } => match piece {
-                        PieceType::Rook if color == by => {
-                            if exclusion_list.is_none_or(|e| !e.contains(&c)) {
-                                return Some((c, piece));
-                            }
-                        }
-                        _ => break,
-                    },
-                }
-            }
+        if let Some(attacker) = attacker {
+            return Some(attacker);
         }
 
-        let queen = match dir.as_ref() {
+        self.ray_tracing(coord, Queen, dir, |c, sq| match sq {
+            Square::Empty => return,
+            Square::Occupied { color, piece } => match piece {
+                PieceType::Queen if color == by => {
+                    if exclusion_list.is_none_or(|e| !e.contains(&c)) {
+                        attacker = Some((c, piece));
+                        return;
+                    }
+                }
+                _ => return,
+            },
+        });
+
+        if let Some(attacker) = attacker {
+            return Some(attacker);
+        }
+
+        let king = match dir {
             None => QUEEN,
             Some(dir) => match dir {
                 RightDiagonal => RIGHT_DIAGONAL,
@@ -425,27 +493,7 @@ impl GameState {
             },
         };
 
-        for &(df, dr) in queen {
-            let mut c = coord;
-            while let Some(next) = c.checked_offset(df, dr) {
-                c = next;
-                let sq = self.board.get(c);
-                match sq {
-                    Square::Empty => continue,
-                    Square::Occupied { color, piece } => match piece {
-                        PieceType::Queen if color == by => {
-                            if exclusion_list.is_none_or(|e| !e.contains(&c)) {
-                                return Some((c, piece));
-                            }
-                        }
-                        _ => break,
-                    },
-                }
-            }
-        }
-
-        // treating directions as offsets
-        for &(df, dr) in queen {
+        for &(df, dr) in king {
             if let Some(target) = coord.checked_offset(df, dr) {
                 match self.board.get(target) {
                     Square::Occupied { color, piece }
@@ -700,35 +748,30 @@ impl GameState {
         from: Coordinate,
         moves: &mut Vec<Move>,
         target_squares: &Option<Vec<Coordinate>>,
-        pin_map: &PinMap,
+        pin_map: Option<&PinMap>,
         move_gen_mode: MoveGenMode,
     ) {
         let color = self.turn;
-        let pinned = pin_map.get(from);
-        if pinned.is_some() {
-            return;
-        }
-        for &(df, dr) in KNIGHT_OFFSETS {
-            if let Some(to) = from.checked_offset(df, dr) {
-                if target_squares
-                    .as_ref()
-                    .is_some_and(|sqrs| !sqrs.contains(&to))
-                {
-                    continue;
-                }
-                match self.board.get(to) {
-                    Square::Occupied { color: c, .. } if c == color => continue,
-                    Square::Occupied { piece, .. } => {
-                        moves.push(Move::new_capture(from, to, PieceType::Knight, piece))
-                    }
-                    _ => {
-                        if move_gen_mode == MoveGenMode::All {
-                            moves.push(Move::new(from, to, PieceType::Knight))
-                        }
-                    }
-                }
+        let pinned = pin_map.and_then(|pm| pm.get(from));
+        self.knight_squares(from, pinned, |to, sq| {
+            if target_squares
+                .as_ref()
+                .is_some_and(|sqrs| !sqrs.contains(&to))
+            {
+                return;
             }
-        }
+            match sq {
+                Square::Occupied { color: c, piece } if c != color => {
+                    moves.push(Move::new_capture(from, to, PieceType::Knight, piece))
+                }
+                Square::Empty => {
+                    if move_gen_mode == MoveGenMode::All {
+                        moves.push(Move::new(from, to, PieceType::Knight))
+                    }
+                }
+                _ => {}
+            }
+        })
     }
 
     fn sliding_moves(
@@ -737,76 +780,34 @@ impl GameState {
         piece: PieceType,
         moves: &mut Vec<Move>,
         target_squares: &Option<Vec<Coordinate>>,
-        pin_map: &PinMap,
+        pin_map: Option<&PinMap>,
         move_gen_mode: MoveGenMode,
     ) {
         let color = self.turn;
-        let pinned = pin_map.get(from);
-        let directions = match piece {
-            PieceType::Bishop => match pinned {
-                None => DIAGONAL,
-                Some(dir) => match dir {
-                    RightDiagonal => RIGHT_DIAGONAL,
-                    LeftDiagonal => LEFT_DIAGONAL,
-                    _ => EMPTY,
-                },
-            },
-            PieceType::Rook => match pinned {
-                None => STRAIGHT,
-                Some(dir) => match dir {
-                    Vertical => VERTICAL,
-                    Horizontal => HORIZONTAL,
-                    _ => EMPTY,
-                },
-            },
-            PieceType::Queen => match pinned {
-                None => QUEEN,
-                Some(dir) => match dir {
-                    RightDiagonal => RIGHT_DIAGONAL,
-                    LeftDiagonal => LEFT_DIAGONAL,
-                    Horizontal => HORIZONTAL,
-                    Vertical => VERTICAL,
-                    _ => EMPTY,
-                },
-            },
-            _ => unreachable!(),
-        };
+        let pinned = pin_map.and_then(|pm| pm.get(from));
 
-        for &(df, dr) in directions {
-            let mut cur = from;
-            while let Some(to) = cur.checked_offset(df, dr) {
-                cur = to;
-                match self.board.get(cur) {
-                    Square::Occupied { color: c, .. } if c == color => {
-                        break;
-                    }
-                    sq => {
-                        if target_squares
-                            .as_ref()
-                            .is_some_and(|sqrs| !sqrs.contains(&to))
-                        {
-                            if sq != Square::Empty {
-                                break;
-                            }
-                            continue;
-                        }
-                        match sq {
-                            Square::Empty => {
-                                if move_gen_mode == MoveGenMode::All {
-                                    moves.push(Move::new(from, cur, piece))
-                                }
-                            }
-                            Square::Occupied {
-                                piece: captured, ..
-                            } => {
-                                moves.push(Move::new_capture(from, cur, piece, captured));
-                                break;
-                            }
-                        }
+        self.ray_tracing(from, piece, pinned, |to, sq| {
+            if target_squares
+                .as_ref()
+                .is_some_and(|sqrs| !sqrs.contains(&to))
+            {
+                return;
+            }
+            match sq {
+                Square::Empty => {
+                    if move_gen_mode == MoveGenMode::All {
+                        moves.push(Move::new(from, to, piece))
                     }
                 }
+                Square::Occupied {
+                    piece: captured,
+                    color: c,
+                } if c != color => {
+                    moves.push(Move::new_capture(from, to, piece, captured));
+                }
+                _ => {}
             }
-        }
+        });
     }
 
     fn king_moves(
@@ -1010,7 +1011,7 @@ impl GameState {
                     from,
                     &mut legal_moves,
                     &target_squares,
-                    &pin_map,
+                    Some(&pin_map),
                     move_gen_mode,
                 ),
                 piece => self.sliding_moves(
@@ -1018,7 +1019,7 @@ impl GameState {
                     piece,
                     &mut legal_moves,
                     &target_squares,
-                    &pin_map,
+                    Some(&pin_map),
                     move_gen_mode,
                 ),
             }
