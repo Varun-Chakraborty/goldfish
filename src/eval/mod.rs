@@ -5,9 +5,7 @@ mod pst;
 
 use crate::{
     eval::{
-        king_safety::king_safety,
-        mobility::piece_mobility,
-        pawn_structure::{doubled_pawns, isolated_pawns, passed_pawns},
+        king_safety::king_safety, mobility::piece_mobility, pawn_structure::pawn_structure,
         pst::pst,
     },
     game::GameState,
@@ -73,29 +71,38 @@ impl GameState {
         };
         let mut material_on_board = 0;
 
+        let mut wpawns: [u8; 8] = [0; 8];
+        let mut bpawns: [u8; 8] = [0; 8];
+
         for idx in 0..64 {
-            let sq = board.get(Coordinate::from_idx(idx));
+            let coord = Coordinate::from_idx(idx);
+            let sq = board.get(coord);
             match sq {
                 Square::Occupied { color, piece } if color == Color::White => {
                     let material = piece.value();
                     eval.material += material;
-                    material_on_board += material;
                     let pst = pst(&piece, color, idx);
                     eval.pst += pst;
                     if piece == PieceType::Bishop {
                         white_bishops += 1;
                     }
+                    
+                    material_on_board += material;
+                    eval.mobility += piece_mobility(self, coord, &sq);
+                    wpawns[idx % 8] |= 1 << (idx / 8);
                 }
                 Square::Occupied { piece, color } => {
                     let material = piece.value();
                     eval.material -= material;
-                    material_on_board += material;
                     let pst = pst(&piece, color, idx);
                     eval.pst -= pst;
-
                     if piece == PieceType::Bishop {
                         black_bishops += 1;
                     }
+                    
+                    material_on_board += material;
+                    eval.mobility -= piece_mobility(self, coord, &sq);
+                    bpawns[idx % 8] |= 1 << (idx / 8);
                 }
                 _ => (),
             }
@@ -108,12 +115,12 @@ impl GameState {
             eval.bishop_pairs -= 30;
         }
 
-        eval.mobility = piece_mobility(self);
         eval.king_safety = king_safety(self, material_on_board);
 
-        eval.passed_pawns = passed_pawns(self);
-        eval.isolated_pawns = isolated_pawns(self);
-        eval.doubled_pawns = doubled_pawns(self);
+        let pawn_structure = pawn_structure(&wpawns, &bpawns);
+        eval.passed_pawns = pawn_structure.passed;
+        eval.isolated_pawns = pawn_structure.isolated;
+        eval.doubled_pawns = pawn_structure.doubled;
 
         eval
     }

@@ -2,4 +2,4 @@
 # perf record -g cargo run --release
 
 cargo build --release
-samply record target/release/run_search
+samply record cargo run --release
