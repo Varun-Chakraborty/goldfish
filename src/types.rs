@@ -75,7 +75,7 @@ impl PieceType {
     }
 
     #[inline(always)]
-    pub fn value(self) -> i32 {
+    pub fn value(self) -> u16 {
         match self {
             PieceType::Pawn => 100,
             PieceType::Knight => 320,

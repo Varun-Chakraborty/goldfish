@@ -9,17 +9,17 @@ pub struct PawnStructure {
     pub doubled: i32,
 }
 
-pub fn pawn_structure(wpawns: &[u8; 8], bpawns: &[u8; 8]) -> PawnStructure {
+pub fn pawn_structure(wp: &[u8; 8], bp: &[u8; 8]) -> PawnStructure {
     let mut isolated = 0;
     let mut doubled = 0;
     let mut passed = 0;
 
-    for (i, file) in wpawns.iter().enumerate() {
+    for (i, file) in wp.iter().enumerate() {
         doubled -= max(0, file.count_ones() as i32 - 1);
         if *file > 0
             && i.checked_sub(1)
-                .is_none_or(|i| wpawns.get(i).is_none_or(|file| *file == 0))
-            && wpawns.get(i + 1).is_none_or(|file| *file == 0)
+                .is_none_or(|i| wp.get(i).is_none_or(|file| *file == 0))
+            && wp.get(i + 1).is_none_or(|file| *file == 0)
         {
             isolated -= ISOLATED_PAWN_PENALTY * file.count_ones() as i32;
         }
@@ -35,9 +35,9 @@ pub fn pawn_structure(wpawns: &[u8; 8], bpawns: &[u8; 8]) -> PawnStructure {
                 passed += PASSED_PAWN_SCORE[rank - 1];
             } else if i
                 .checked_sub(1)
-                .is_none_or(|i| bpawns.get(i).is_none_or(|file| file >> rank == 0))
-                && bpawns.get(i).is_none_or(|file| file >> rank == 0)
-                && bpawns.get(i + 1).is_none_or(|file| file >> rank == 0)
+                .is_none_or(|i| bp.get(i).is_none_or(|file| file >> rank == 0))
+                && bp.get(i).is_none_or(|file| file >> rank == 0)
+                && bp.get(i + 1).is_none_or(|file| file >> rank == 0)
             {
                 is_passed = true;
                 passed += PASSED_PAWN_SCORE[rank - 1];
@@ -45,12 +45,12 @@ pub fn pawn_structure(wpawns: &[u8; 8], bpawns: &[u8; 8]) -> PawnStructure {
         }
     }
 
-    for (i, file) in bpawns.iter().enumerate() {
+    for (i, file) in bp.iter().enumerate() {
         doubled += max(0, file.count_ones() as i32 - 1);
         if *file > 0
             && i.checked_sub(1)
-                .is_none_or(|i| bpawns.get(i).is_none_or(|file| *file == 0))
-            && bpawns.get(i + 1).is_none_or(|file| *file == 0)
+                .is_none_or(|i| bp.get(i).is_none_or(|file| *file == 0))
+            && bp.get(i + 1).is_none_or(|file| *file == 0)
         {
             isolated += ISOLATED_PAWN_PENALTY * file.count_ones() as i32;
         }
@@ -65,9 +65,9 @@ pub fn pawn_structure(wpawns: &[u8; 8], bpawns: &[u8; 8]) -> PawnStructure {
                 passed -= PASSED_PAWN_SCORE[6 - rank];
             } else if i
                 .checked_sub(1)
-                .is_none_or(|i| wpawns.get(i).is_none_or(|file| file << rank == 0))
-                && wpawns.get(i).is_none_or(|file| file << rank == 0)
-                && wpawns.get(i + 1).is_none_or(|file| file << rank == 0)
+                .is_none_or(|i| wp.get(i).is_none_or(|file| file << rank == 0))
+                && wp.get(i).is_none_or(|file| file << rank == 0)
+                && wp.get(i + 1).is_none_or(|file| file << rank == 0)
             {
                 is_passed = true;
                 passed -= PASSED_PAWN_SCORE[6 - rank];

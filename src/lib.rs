@@ -1,7 +1,6 @@
 mod board;
 mod clock;
 mod engine;
-mod eval;
 mod game;
 mod history;
 mod notation;

@@ -26,7 +26,7 @@ pub fn ordermoves(
         }
         if let Some(captured) = m.captured {
             score += CAPTURE_BONUS;
-            score += captured.value() * 100 - m.piece.value();
+            score += captured.value() as i32 * 100 - m.piece.value() as i32;
         } else {
             score += history.score(side_to_move, m) as i32;
         }

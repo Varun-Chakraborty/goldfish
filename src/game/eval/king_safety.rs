@@ -3,7 +3,7 @@ use crate::{
     types::{Color, Coordinate, PieceType, Square},
 };
 
-fn phase_factor(material: i32) -> f32 {
+fn phase_factor(material: u16) -> f32 {
     let p = material as f32 / 8000.0;
     p.clamp(0.0, 1.0)
 }
@@ -13,8 +13,8 @@ fn pawn_shield(gs: &GameState, color: Color) -> i32 {
     let mut score = 0;
 
     let (king, dr) = match color {
-        Color::White => (gs.kings.0, 1),
-        Color::Black => (gs.kings.1, -1),
+        Color::White => (gs.wk, 1),
+        Color::Black => (gs.bk, -1),
     };
 
     for df in [-1, 0, 1] {
@@ -35,18 +35,18 @@ fn pawn_shield(gs: &GameState, color: Color) -> i32 {
     score
 }
 
-pub fn king_safety(gs: &GameState, material_on_board: i32) -> i32 {
+pub fn king_safety(gs: &GameState, material_on_board: u16) -> i32 {
     let mut safety = 0;
 
     let g1 = Coordinate::new(6, 0);
     let c1 = Coordinate::new(2, 0);
-    if gs.kings.0 == g1 || gs.kings.0 == c1 {
+    if gs.wk == g1 || gs.wk == c1 {
         safety += pawn_shield(gs, Color::White);
     }
 
     let g8 = Coordinate::new(6, 7);
     let c8 = Coordinate::new(2, 7);
-    if gs.kings.1 == g8 || gs.kings.1 == c8 {
+    if gs.bk == g8 || gs.bk == c8 {
         safety -= pawn_shield(gs, Color::Black);
     }
 
