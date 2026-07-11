@@ -177,8 +177,8 @@ impl GameState {
                 } else {
                     m.to
                 };
-                self.wp[coord.file() as usize] &= !(1 << coord.rank());
-                self.bp[coord.file() as usize] &= !(1 << coord.rank());
+                self.wp &= !(1 << coord.idx());
+                self.bp &= !(1 << coord.idx());
                 self.wb &= !(1 << coord.idx());
                 self.bb &= !(1 << coord.idx());
 
@@ -273,12 +273,12 @@ impl GameState {
 
         match (moving_piece, us) {
             (PieceType::Pawn, Color::White) => {
-                self.wp[m.from.file() as usize] &= !(1 << m.from.rank());
-                self.wp[m.to.file() as usize] |= 1 << m.to.rank();
+                self.wp &= !(1 << m.from.idx());
+                self.wp |= 1 << m.to.idx();
             }
             (PieceType::Pawn, Color::Black) => {
-                self.bp[m.from.file() as usize] &= !(1 << m.from.rank());
-                self.bp[m.to.file() as usize] |= 1 << m.to.rank();
+                self.bp &= !(1 << m.from.idx());
+                self.bp |= 1 << m.to.idx();
             }
             (PieceType::Bishop, Color::White) => {
                 self.wb &= !(1 << m.from.idx());
@@ -438,12 +438,12 @@ impl GameState {
 
         match (m.piece, us) {
             (PieceType::Pawn, Color::White) => {
-                self.wp[m.to.file() as usize] &= !(1 << m.to.rank());
-                self.wp[m.from.file() as usize] |= 1 << m.from.rank();
+                self.wp &= !(1 << m.to.idx());
+                self.wp |= 1 << m.from.idx();
             }
             (PieceType::Pawn, Color::Black) => {
-                self.bp[m.to.file() as usize] &= !(1 << m.to.rank());
-                self.bp[m.from.file() as usize] |= 1 << m.from.rank();
+                self.bp &= !(1 << m.to.idx());
+                self.bp |= 1 << m.from.idx();
             }
             (PieceType::Bishop, Color::White) => {
                 self.wb &= !(1 << m.to.idx());
@@ -470,12 +470,8 @@ impl GameState {
                 m.to
             };
             match (piece, them) {
-                (PieceType::Pawn, Color::White) => {
-                    self.wp[coord.file() as usize] |= 1 << coord.rank()
-                }
-                (PieceType::Pawn, Color::Black) => {
-                    self.bp[coord.file() as usize] |= 1 << coord.rank()
-                }
+                (PieceType::Pawn, Color::White) => self.wp |= 1 << coord.idx(),
+                (PieceType::Pawn, Color::Black) => self.bp |= 1 << coord.idx(),
                 (PieceType::Bishop, Color::White) => self.wb |= 1 << coord.idx(),
                 (PieceType::Bishop, Color::Black) => self.bb |= 1 << coord.idx(),
                 _ => (),

@@ -91,8 +91,8 @@ pub struct GameState {
     pub zobrist: u64,
     pub history: Vec<u64>,
     material_count: [u8; 10],
-    pub wp: [u8; 8],
-    pub bp: [u8; 8],
+    pub wp: u64,
+    pub bp: u64,
     pub wb: u64,
     pub bb: u64,
     pub pst_score: i32,
@@ -179,34 +179,32 @@ impl GameState {
             history: Vec::new(),
             zobrist: 0,
             material_count: [0; 10],
-            wp: [0; 8],
-            bp: [0; 8],
+            wp: 0,
+            bp: 0,
             wb: 0,
             bb: 0,
             pst_score: 0,
             mobility_score: 0,
         };
 
-        for i in 0..8 {
-            for j in 0..8 {
-                let coord = Coordinate::new(i, j);
-                let sq = gs.board.get(coord);
-                if let Square::Occupied { color, piece } = sq {
-                    match (color, piece) {
-                        (Color::White, PieceType::Pawn) => gs.wp[i as usize] |= 1 << j,
-                        (Color::Black, PieceType::Pawn) => gs.bp[i as usize] |= 1 << j,
-                        (Color::White, PieceType::Bishop) => gs.wb |= 1 << coord.idx(),
-                        (Color::Black, PieceType::Bishop) => gs.bb |= 1 << coord.idx(),
-                        _ => {}
-                    }
-
-                    if piece != PieceType::King {
-                        gs.material_count[gs.material_idx(piece, color)] += 1;
-                    }
-
-                    gs.pst_score += pst(&piece, color, coord.idx());
-                    gs.mobility_score += piece_mobility(&gs, coord);
+        for idx in 0..64 {
+            let coord = Coordinate::from_idx(idx);
+            let sq = gs.board.get(coord);
+            if let Square::Occupied { color, piece } = sq {
+                match (color, piece) {
+                    (Color::White, PieceType::Pawn) => gs.wp |= 1 << idx,
+                    (Color::Black, PieceType::Pawn) => gs.bp |= 1 << idx,
+                    (Color::White, PieceType::Bishop) => gs.wb |= 1 << idx,
+                    (Color::Black, PieceType::Bishop) => gs.bb |= 1 << idx,
+                    _ => {}
                 }
+
+                if piece != PieceType::King {
+                    gs.material_count[gs.material_idx(piece, color)] += 1;
+                }
+
+                gs.pst_score += pst(&piece, color, coord.idx());
+                gs.mobility_score += piece_mobility(&gs, coord);
             }
         }
 

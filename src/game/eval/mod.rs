@@ -98,7 +98,7 @@ impl GameState {
 
         eval.king_safety = king_safety(self, material_on_board);
 
-        let pawn_structure = pawn_structure(&self.wp, &self.bp);
+        let pawn_structure = pawn_structure(self.wp, self.bp);
         eval.passed_pawns = pawn_structure.passed;
         eval.isolated_pawns = pawn_structure.isolated;
         eval.doubled_pawns = pawn_structure.doubled;

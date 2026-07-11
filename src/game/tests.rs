@@ -46,8 +46,8 @@ fn test_from_fen_startpos() {
     let gs =
         GameState::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").unwrap();
 
-    assert_eq!(gs.wp, [2; 8]);
-    assert_eq!(gs.bp, [64; 8]);
+    assert_eq!(gs.wp, 0x_00_00_00_00_00_00_FF_00);
+    assert_eq!(gs.bp, 0x_00_FF_00_00_00_00_00_00);
     assert_eq!(
         gs.to_fen(),
         "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
@@ -59,16 +59,10 @@ fn test_from_fen_position1() {
     let gs = GameState::from_fen("rnb1kbnr/ppp1pppp/5q2/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1")
         .unwrap();
 
-    assert_eq!(gs.wp, [2, 2, 2, 2, 16, 2, 2, 2]);
-    assert_eq!(gs.bp, [64, 64, 64, 16, 64, 64, 64, 64]);
-    assert_eq!(
-        gs.wb,
-        0b_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00100100
-    );
-    assert_eq!(
-        gs.bb,
-        0b_00100100_00000000_00000000_00000000_00000000_00000000_00000000_00000000
-    );
+    assert_eq!(gs.wp, 0x_00_00_00_10_00_00_EF_00);
+    assert_eq!(gs.bp, 0x_00_F7_00_08_00_00_00_00);
+    assert_eq!(gs.wb, 0x_00_00_00_00_00_00_00_24);
+    assert_eq!(gs.bb, 0x_24_00_00_00_00_00_00_00);
     assert_eq!(
         gs.to_fen(),
         "rnb1kbnr/ppp1pppp/5q2/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1"
@@ -82,9 +76,9 @@ fn test_make_move_startpos() {
     let m = parse_algebraic(&mut gs, "e4").unwrap();
     let material_count = gs.material_count;
     let undo = gs.make_move(m);
-    assert_eq!(gs.wp[4], 8);
+    assert_eq!(gs.wp, 0x_00_00_00_00_10_00_EF_00);
     gs.unmake_move(undo);
-    assert_eq!(gs.wp[4], 2);
+    assert_eq!(gs.wp, 0x_00_00_00_00_00_00_FF_00);
     assert_eq!(gs.material_count, material_count);
 }
 
@@ -95,38 +89,22 @@ fn test_make_move_capture() {
             .unwrap();
     let m = parse_algebraic(&mut gs, "exd6").unwrap();
     let undo = gs.make_move(m);
-    assert_eq!(gs.wp[3], 34);
-    assert_eq!(gs.wp[4], 0);
-    assert_eq!(gs.bp[3], 0);
-    assert_eq!(
-        gs.bb,
-        0b_00100100_00000000_00100000_00000000_00000000_00000000_00000000_00000000
-    );
+    assert_eq!(gs.wp, 0x_00_00_08_00_00_00_EF_00);
+    assert_eq!(gs.bp, 0x_00_F7_00_00_00_00_00_00);
+    assert_eq!(gs.bb, 0x_24_00_20_00_00_00_00_00);
     gs.unmake_move(undo);
-    assert_eq!(gs.wp[3], 2);
-    assert_eq!(gs.wp[4], 16);
-    assert_eq!(gs.bp[3], 16);
-    assert_eq!(
-        gs.bb,
-        0b_00100100_00000000_00100000_00000000_00000000_00000000_00000000_00000000
-    );
+    assert_eq!(gs.wp, 0x_00_00_00_10_00_00_EF_00);
+    assert_eq!(gs.bp, 0x_00_F7_00_08_00_00_00_00);
+    assert_eq!(gs.bb, 0x_24_00_20_00_00_00_00_00);
     let m = parse_algebraic(&mut gs, "exf6").unwrap();
     let undo = gs.make_move(m);
-    assert_eq!(gs.wp[5], 34);
-    assert_eq!(gs.wp[4], 0);
-    assert_eq!(gs.bp[3], 16);
-    assert_eq!(
-        gs.bb,
-        0b_00100100_00000000_00000000_00000000_00000000_00000000_00000000_00000000
-    );
+    assert_eq!(gs.wp, 0x_00_00_20_00_00_00_EF_00);
+    assert_eq!(gs.bp, 0x_00_F7_00_08_00_00_00_00);
+    assert_eq!(gs.bb, 0x_24_00_00_00_00_00_00_00);
     gs.unmake_move(undo);
-    assert_eq!(gs.wp[5], 2);
-    assert_eq!(gs.wp[4], 16);
-    assert_eq!(gs.bp[3], 16);
-    assert_eq!(
-        gs.bb,
-        0b_00100100_00000000_00100000_00000000_00000000_00000000_00000000_00000000
-    );
+    assert_eq!(gs.wp, 0x_00_00_00_10_00_00_EF_00);
+    assert_eq!(gs.bp, 0x_00_F7_00_08_00_00_00_00);
+    assert_eq!(gs.bb, 0x_24_00_20_00_00_00_00_00);
 }
 
 #[test]
