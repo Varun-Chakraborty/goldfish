@@ -100,12 +100,12 @@ static KING_MG_PST: [i32; 64] = [
 pub fn pst(piece: &PieceType, color: Color, idx: usize) -> i32 {
     let idx = if color == Color::White { idx } else { idx ^ 56 };
 
-    match piece {
+    (match piece {
         PieceType::Knight => KNIGHT_PST[idx],
         PieceType::Bishop => BISHOP_PST[idx],
         PieceType::Rook => ROOK_PST[idx],
         PieceType::Queen => QUEEN_PST[idx],
         PieceType::King => KING_MG_PST[idx],
         PieceType::Pawn => PAWN_PST[idx],
-    }
+    } * (if color == Color::White { 1 } else { -1 }))
 }

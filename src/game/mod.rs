@@ -1,6 +1,8 @@
 mod eval;
 mod make_unmake;
+mod mobility;
 mod move_gen;
+mod pst;
 #[cfg(test)]
 mod tests;
 
@@ -8,7 +10,11 @@ use std::num::ParseIntError;
 
 use crate::{
     board::{Board, BoardError},
-    game::Direction::{Horizontal, LeftDiagonal, Offset, RightDiagonal, Vertical},
+    game::{
+        Direction::{Horizontal, LeftDiagonal, Offset, RightDiagonal, Vertical},
+        mobility::piece_mobility,
+        pst::pst,
+    },
     types::{
         CastlingRights, Color, ColorError, Coordinate, Move,
         PieceType::{self, Bishop, Queen, Rook},
@@ -40,6 +46,8 @@ pub struct Undo {
     en_passant: Option<Coordinate>,
     halfmove_clock: u32,
     move_info: Move,
+    pst_score: i32,
+    mobility_score: i32,
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -87,6 +95,8 @@ pub struct GameState {
     pub bp: [u8; 8],
     pub wb: u64,
     pub bb: u64,
+    pub pst_score: i32,
+    pub mobility_score: i32,
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -173,6 +183,8 @@ impl GameState {
             bp: [0; 8],
             wb: 0,
             bb: 0,
+            pst_score: 0,
+            mobility_score: 0,
         };
 
         for i in 0..8 {
@@ -191,6 +203,9 @@ impl GameState {
                     if piece != PieceType::King {
                         gs.material_count[gs.material_idx(piece, color)] += 1;
                     }
+
+                    gs.pst_score += pst(&piece, color, coord.idx());
+                    gs.mobility_score += piece_mobility(&gs, coord);
                 }
             }
         }

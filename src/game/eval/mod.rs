@@ -1,17 +1,12 @@
 mod king_safety;
-mod mobility;
 mod pawn_structure;
-mod pst;
 
 use crate::{
     game::{
         GameState,
-        eval::{
-            king_safety::king_safety, mobility::piece_mobility, pawn_structure::pawn_structure,
-            pst::pst,
-        },
+        eval::{king_safety::king_safety, pawn_structure::pawn_structure},
     },
-    types::{Color, Coordinate, PieceType, Square},
+    types::{Color, PieceType},
 };
 
 #[derive(Copy, Clone, Debug)]
@@ -58,7 +53,6 @@ impl Evaluation {
 
 impl GameState {
     pub fn eval(&self) -> Evaluation {
-        let board = &self.board;
         let mut eval: Evaluation = Evaluation {
             material: 0,
             pst: 0,
@@ -69,6 +63,9 @@ impl GameState {
             isolated_pawns: 0,
             doubled_pawns: 0,
         };
+
+        eval.pst = self.pst_score;
+        eval.mobility = self.mobility_score;
 
         let pawn = PieceType::Pawn;
         let knight = PieceType::Knight;
@@ -90,26 +87,6 @@ impl GameState {
 
         eval.material = wm as i32 - bm as i32;
 
-        for idx in 0..64 {
-            let coord = Coordinate::from_idx(idx);
-            let sq = board.get(coord);
-            match sq {
-                Square::Occupied { color, piece } if color == Color::White => {
-                    let pst = pst(&piece, color, idx);
-                    eval.pst += pst;
-
-                    eval.mobility += piece_mobility(self, coord, &sq);
-                }
-                Square::Occupied { piece, color } => {
-                    let pst = pst(&piece, color, idx);
-                    eval.pst -= pst;
-
-                    eval.mobility -= piece_mobility(self, coord, &sq);
-                }
-                _ => (),
-            }
-        }
-
         if self.wb.count_ones() >= 2 {
             eval.bishop_pairs += 30;
         }
@@ -117,17 +94,7 @@ impl GameState {
             eval.bishop_pairs -= 30;
         }
 
-        let material_on_board = self.material_count[self.material_idx(pawn, Color::White)] as u16
-            * pawn.value()
-            + self.material_count[self.material_idx(knight, Color::White)] as u16 * knight.value()
-            + self.material_count[self.material_idx(bishop, Color::White)] as u16 * bishop.value()
-            + self.material_count[self.material_idx(rook, Color::White)] as u16 * rook.value()
-            + self.material_count[self.material_idx(queen, Color::White)] as u16 * queen.value()
-            + self.material_count[self.material_idx(pawn, Color::Black)] as u16 * pawn.value()
-            + self.material_count[self.material_idx(knight, Color::Black)] as u16 * knight.value()
-            + self.material_count[self.material_idx(bishop, Color::Black)] as u16 * bishop.value()
-            + self.material_count[self.material_idx(rook, Color::Black)] as u16 * rook.value()
-            + self.material_count[self.material_idx(queen, Color::Black)] as u16 * queen.value();
+        let material_on_board = wm + bm;
 
         eval.king_safety = king_safety(self, material_on_board);
 

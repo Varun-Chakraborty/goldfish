@@ -1,65 +1,108 @@
 use crate::{
     GameState,
-    game::Undo,
+    game::{
+        Undo,
+        mobility::{collect_affected_pieces, mobility_of_affected_pieces, piece_mobility},
+        pst::pst,
+    },
     types::{CastleSide, Color, Coordinate, Move, PieceType, Square},
     zobrist::{castling_hash, ep_hash, piece_sq_hash, side_hash},
 };
 
 impl GameState {
-    fn apply_kingside_castle(&mut self, us: Color, rank: u8) {
+    fn apply_kingside_castle(&mut self, us: Color, rank: u8, affected_pieces: &mut u64) {
         match us {
             Color::White => self.wk = Coordinate::new(6, 0),
             Color::Black => self.bk = Coordinate::new(6, 7),
         }
-        self.board.set(Coordinate::new(4, rank), Square::Empty);
-        self.zobrist ^= piece_sq_hash(PieceType::King, us, Coordinate::new(4, rank));
-        self.board.set(Coordinate::new(7, rank), Square::Empty);
-        self.zobrist ^= piece_sq_hash(PieceType::Rook, us, Coordinate::new(7, rank));
 
-        self.board.set(
-            Coordinate::new(6, rank),
-            Square::Occupied {
-                color: us,
-                piece: PieceType::King,
-            },
-        );
-        self.zobrist ^= piece_sq_hash(PieceType::King, us, Coordinate::new(6, rank));
-        self.board.set(
-            Coordinate::new(5, rank),
-            Square::Occupied {
-                color: us,
-                piece: PieceType::Rook,
-            },
-        );
-        self.zobrist ^= piece_sq_hash(PieceType::Rook, us, Coordinate::new(5, rank));
+        let ex = Coordinate::new(4, rank);
+        let fx = Coordinate::new(5, rank);
+        let gx = Coordinate::new(6, rank);
+        let hx = Coordinate::new(7, rank);
+
+        collect_affected_pieces(self, ex, affected_pieces);
+        collect_affected_pieces(self, fx, affected_pieces);
+        collect_affected_pieces(self, gx, affected_pieces);
+        collect_affected_pieces(self, hx, affected_pieces);
+
+        *affected_pieces &= !(1 << ex.idx()) & !(1 << hx.idx());
+
+        self.mobility_score -= piece_mobility(self, hx);
+        self.pst_score -= pst(&PieceType::King, us, ex.idx());
+        self.pst_score -= pst(&PieceType::Rook, us, hx.idx());
+        self.mobility_score -= mobility_of_affected_pieces(self, *affected_pieces);
+
+        self.board.set(ex, Square::Empty);
+        self.zobrist ^= piece_sq_hash(PieceType::King, us, ex);
+        self.board.set(hx, Square::Empty);
+        self.zobrist ^= piece_sq_hash(PieceType::Rook, us, hx);
+
+        let king = Square::Occupied {
+            color: us,
+            piece: PieceType::King,
+        };
+        let rook = Square::Occupied {
+            color: us,
+            piece: PieceType::Rook,
+        };
+        self.board.set(gx, king);
+        self.zobrist ^= piece_sq_hash(PieceType::King, us, gx);
+        self.board.set(fx, rook);
+        self.zobrist ^= piece_sq_hash(PieceType::Rook, us, fx);
+
+        self.mobility_score += piece_mobility(self, fx);
+        self.pst_score += pst(&PieceType::Rook, us, fx.idx());
+        self.pst_score += pst(&PieceType::King, us, gx.idx());
+        self.mobility_score += mobility_of_affected_pieces(self, *affected_pieces);
     }
 
-    fn apply_queenside_castle(&mut self, us: Color, rank: u8) {
+    fn apply_queenside_castle(&mut self, us: Color, rank: u8, affected_pieces: &mut u64) {
         match us {
             Color::White => self.wk = Coordinate::new(2, 0),
             Color::Black => self.bk = Coordinate::new(2, 7),
         }
-        self.board.set(Coordinate::new(4, rank), Square::Empty);
-        self.zobrist ^= piece_sq_hash(PieceType::King, us, Coordinate::new(4, rank));
-        self.board.set(Coordinate::new(0, rank), Square::Empty);
-        self.zobrist ^= piece_sq_hash(PieceType::Rook, us, Coordinate::new(0, rank));
 
-        self.board.set(
-            Coordinate::new(2, rank),
-            Square::Occupied {
-                color: us,
-                piece: PieceType::King,
-            },
-        );
-        self.zobrist ^= piece_sq_hash(PieceType::King, us, Coordinate::new(2, rank));
-        self.board.set(
-            Coordinate::new(3, rank),
-            Square::Occupied {
-                color: us,
-                piece: PieceType::Rook,
-            },
-        );
-        self.zobrist ^= piece_sq_hash(PieceType::Rook, us, Coordinate::new(3, rank));
+        let ax = Coordinate::new(0, rank);
+        let cx = Coordinate::new(2, rank);
+        let dx = Coordinate::new(3, rank);
+        let ex = Coordinate::new(4, rank);
+
+        collect_affected_pieces(self, ax, affected_pieces);
+        collect_affected_pieces(self, cx, affected_pieces);
+        collect_affected_pieces(self, dx, affected_pieces);
+        collect_affected_pieces(self, ex, affected_pieces);
+
+        *affected_pieces &= !(1 << ax.idx()) & !(1 << ex.idx());
+
+        self.mobility_score -= piece_mobility(self, ax);
+        self.pst_score -= pst(&PieceType::King, us, ex.idx());
+        self.pst_score -= pst(&PieceType::Rook, us, ax.idx());
+        self.mobility_score -= mobility_of_affected_pieces(self, *affected_pieces);
+
+        self.board.set(ex, Square::Empty);
+        self.zobrist ^= piece_sq_hash(PieceType::King, us, ex);
+        self.board.set(ax, Square::Empty);
+        self.zobrist ^= piece_sq_hash(PieceType::Rook, us, ax);
+
+        let king = Square::Occupied {
+            color: us,
+            piece: PieceType::King,
+        };
+        let rook = Square::Occupied {
+            color: us,
+            piece: PieceType::Rook,
+        };
+        self.board.set(cx, king);
+        self.zobrist ^= piece_sq_hash(PieceType::King, us, cx);
+        self.board.set(dx, rook);
+        self.zobrist ^= piece_sq_hash(PieceType::Rook, us, dx);
+
+        self.mobility_score += piece_mobility(self, dx);
+        self.pst_score += pst(&PieceType::King, us, cx.idx());
+        self.pst_score += pst(&PieceType::Rook, us, dx.idx());
+
+        self.mobility_score += mobility_of_affected_pieces(self, *affected_pieces);
     }
 
     pub fn make_move(&mut self, m: Move) -> Undo {
@@ -68,6 +111,8 @@ impl GameState {
             en_passant: self.en_passant,
             halfmove_clock: self.halfmove_clock,
             move_info: m,
+            pst_score: self.pst_score,
+            mobility_score: self.mobility_score,
         };
         self.history.push(self.zobrist);
         self.zobrist ^= side_hash();
@@ -75,6 +120,8 @@ impl GameState {
         let us = self.turn;
         let them = us.opponent();
         self.turn = them;
+
+        let mut affected_pieces = 0;
 
         if us == Color::Black {
             self.fullmove_number += 1;
@@ -91,8 +138,10 @@ impl GameState {
                 Color::Black => 7,
             };
             match castle {
-                CastleSide::Kingside => self.apply_kingside_castle(us, rank),
-                CastleSide::Queenside => self.apply_queenside_castle(us, rank),
+                CastleSide::Kingside => self.apply_kingside_castle(us, rank, &mut affected_pieces),
+                CastleSide::Queenside => {
+                    self.apply_queenside_castle(us, rank, &mut affected_pieces)
+                }
             }
             if self.can_castle_kingside(us) {
                 self.zobrist ^= castling_hash(us, CastleSide::Kingside);
@@ -103,6 +152,20 @@ impl GameState {
             self.set_castle(us, false, false);
             return undo;
         }
+
+        collect_affected_pieces(self, m.from, &mut affected_pieces);
+        collect_affected_pieces(self, m.to, &mut affected_pieces);
+        if m.en_passant {
+            let capture_coord = Coordinate::new(m.to.file(), m.from.rank());
+            collect_affected_pieces(self, capture_coord, &mut affected_pieces);
+            affected_pieces &= !(1 << capture_coord.idx());
+        }
+        affected_pieces &= !(1 << m.from.idx()) & !(1 << m.to.idx());
+
+        self.mobility_score -= piece_mobility(self, m.from);
+        self.mobility_score -= piece_mobility(self, m.to);
+
+        self.mobility_score -= mobility_of_affected_pieces(self, affected_pieces);
 
         let moving_piece = m.piece;
         let is_pawn_move: bool = matches!(moving_piece, PieceType::Pawn);
@@ -121,6 +184,8 @@ impl GameState {
 
                 self.zobrist ^= piece_sq_hash(piece, them, coord);
                 self.remove_material(piece, them, 1);
+
+                self.pst_score -= pst(&piece, them, coord.idx());
 
                 self.board.set(coord, Square::Empty);
 
@@ -200,9 +265,11 @@ impl GameState {
             }
         }
 
+        self.pst_score -= pst(&moving_piece, us, m.from.idx());
         self.board.set(m.to, self.board.get(m.from));
         self.board.set(m.from, Square::Empty);
         self.zobrist ^= piece_sq_hash(moving_piece, us, m.from);
+        self.pst_score += pst(&moving_piece, us, m.to.idx());
 
         match (moving_piece, us) {
             (PieceType::Pawn, Color::White) => {
@@ -241,6 +308,7 @@ impl GameState {
                 }
                 _ => (),
             }
+            self.pst_score += pst(&promo, us, m.to.idx());
             self.zobrist ^= piece_sq_hash(promo, us, m.to);
             self.add_material(promo, us, 1);
             self.remove_material(moving_piece, us, 1);
@@ -253,6 +321,9 @@ impl GameState {
         } else {
             self.halfmove_clock += 1;
         }
+
+        self.mobility_score += piece_mobility(self, m.to);
+        self.mobility_score += mobility_of_affected_pieces(self, affected_pieces);
 
         undo
     }
@@ -319,6 +390,8 @@ impl GameState {
         self.castling_rights = undo.castling_rights;
         self.en_passant = undo.en_passant;
         self.halfmove_clock = undo.halfmove_clock;
+        self.pst_score = undo.pst_score;
+        self.mobility_score = undo.mobility_score;
 
         let m = undo.move_info;
 
