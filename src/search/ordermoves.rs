@@ -1,15 +1,17 @@
 use std::cmp::Reverse;
 
 use crate::{
+    GameState,
     history::HistoryHeuristic,
+    see::see,
     types::{Color, Move},
 };
 
 const PV_BONUS: i32 = 2_000_000;
 const TT_BONUS: i32 = 1_000_000;
-const CAPTURE_BONUS: i32 = 100_000;
 
 pub fn ordermoves(
+    gs: &mut GameState,
     moves: &mut [Move],
     side_to_move: Color,
     tt_best_move: Option<Move>,
@@ -25,8 +27,10 @@ pub fn ordermoves(
             score += TT_BONUS;
         }
         if let Some(captured) = m.captured {
-            score += CAPTURE_BONUS;
-            score += captured.value() as i32 * 100 - m.piece.value() as i32;
+            let see = see(gs, m);
+            let mvv_lva = captured.value() as i32 * 100 - m.piece.value() as i32;
+            score += see * 100;
+            score += mvv_lva;
         } else {
             score += history.score(side_to_move, m) as i32;
         }

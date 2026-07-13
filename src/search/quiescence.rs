@@ -7,6 +7,7 @@ use crate::{
         PositionStatus::{Checkmate, Draw, Ongoing},
     },
     search::{DRAW, MATE, SearchContext, ordermoves::ordermoves},
+    see::see,
     transposition::Bound,
     types::Color,
 };
@@ -87,7 +88,7 @@ pub fn quiescence(
         gs.legal_moves(MoveGenMode::CaptureOnly)
     };
 
-    ordermoves(&mut legal, gs.turn, None, None, ctx.history_heuristics);
+    ordermoves(gs, &mut legal, gs.turn, None, None, ctx.history_heuristics);
     let total_moves = legal.len();
     ctx.qsearch_stats.available_moves += total_moves as u64;
 
@@ -97,6 +98,12 @@ pub fn quiescence(
         if ctx.should_stop() {
             ctx.stopped = true;
             return score;
+        }
+        if !in_check && m.captured.is_some() {
+            let see = see(gs, &m);
+            if see < 0 {
+                continue;
+            }
         }
         let undo = gs.make_move(m);
         let result = -quiescence(gs, ply + 1, depth + 1, -beta, -alpha, ctx);

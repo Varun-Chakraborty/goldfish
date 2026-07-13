@@ -152,6 +152,7 @@ pub fn negamax(
         .flatten();
 
     ordermoves(
+        gs,
         &mut legal,
         gs.turn,
         tt_best_move,

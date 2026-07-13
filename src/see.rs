@@ -4,14 +4,14 @@ use crate::{
     types::{
         Color::{Black, White},
         Move,
-        PieceType::{Pawn, Queen},
+        PieceType::{King, Pawn, Queen},
     },
 };
 
 pub fn see(gs: &mut GameState, &m: &Move) -> i32 {
     let to = m.to;
     let mut score =
-        m.captured.map_or(0, |p| p.value()) + m.promotion.map_or(0, |p| p.value() - 100);
+        m.captured.map_or(0, |p| p.value()) as i32 + m.promotion.map_or(0, |p| p.value() - 100) as i32;
 
     let undo = gs.make_move(m);
     let pin_map = gs.compute_pins();
@@ -54,6 +54,11 @@ pub fn see(gs: &mut GameState, &m: &Move) -> i32 {
         if let Some(lva) = lva {
             if lva_piece.is_some_and(|piece| piece != lva.1) {
                 break;
+            }
+            if lva.1 == King {
+                if gs.lva(to, gs.turn.opponent(), None, None).is_some() {
+                    break;
+                }
             }
             lvas.push(lva);
             lva_piece = Some(lva.1);
