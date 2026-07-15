@@ -5,7 +5,7 @@ use std::{
 
 use goldfish::{
     EngineCommand,
-    EngineEvent::{Debug, IterationInfo, SearchFinished},
+    EngineEvent::{CurrentMove, Debug, IterationInfo, SearchFinished},
     EngineLimits, EngineWorker, GameState,
     UCIMessage::{Command, Event},
     fmt_pgn_moves,
@@ -191,7 +191,7 @@ fn main() {
                         cmd_sender.send(EngineCommand::Quit).unwrap();
                         break;
                     }
-                    Debug { .. } => {}
+                    Debug { .. } | CurrentMove { .. } => {}
                 },
                 Command(line) => println!("{}", line),
             },

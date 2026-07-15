@@ -1,6 +1,7 @@
 mod negamax;
 mod ordermoves;
 mod quiescence;
+mod root_search;
 pub mod search_types;
 
 use std::{
@@ -15,13 +16,12 @@ use std::{
 use crate::{
     EngineEvent,
     clock::Clock,
-    game::{GameState, MoveGenMode},
+    game::GameState,
     history::HistoryHeuristic,
     search::{
-        negamax::negamax,
+        root_search::root_search,
         search_types::{
-            EngineLimits, IterationInfo, PVTable, Score, SearchContext, SearchCounters,
-            SearchStats, SearchType::FullSearch,
+            EngineLimits, IterationInfo, PVTable, Score, SearchContext, SearchCounters, SearchStats,
         },
     },
     transposition::TranspositionTable,
@@ -40,6 +40,7 @@ pub fn iterative_deepening<F>(
     tt: &mut Option<TranspositionTable>,
     history: &mut Option<HistoryHeuristic>,
     clock: &mut Clock,
+    multipv: u8,
     mut callback: F,
 ) -> (Option<Move>, Option<Move>)
 where
@@ -48,8 +49,7 @@ where
     let tt = tt.get_or_insert_with(|| TranspositionTable::new(64));
     let history_heuristics = history.get_or_insert_with(HistoryHeuristic::new);
     let mut pv_table = PVTable::new();
-    pv_table.table[0][0] = gs.legal_moves(MoveGenMode::All).get(0).copied();
-    let mut pv = None;
+    let mut lines = vec![];
     let mut nodes_in_last_iteration = 0;
     let mut depth = 1;
 
@@ -74,7 +74,14 @@ where
         ctx.seldepth = 0;
         ctx.stopped = false;
 
-        let result = negamax(gs, depth, 0, -MATE, MATE, &pv, true, FullSearch, &mut ctx);
+        root_search(
+            gs,
+            depth,
+            &mut ctx,
+            &mut lines,
+            multipv as usize,
+            Some(&mut callback),
+        );
 
         let elapsed = ctx.start_time.elapsed().as_millis();
         if ctx.stopped
@@ -84,32 +91,45 @@ where
             break;
         }
 
-        pv = ctx.pv_table.table[0][..ctx.pv_table.length[0] as usize]
-            .iter()
-            .copied()
-            .collect();
+        for i in 0..multipv {
+            if i as usize >= lines.len() {
+                break;
+            }
 
-        let duration = start.elapsed();
-        let tt_stats = ctx.tt.stats();
+            let line = lines[i as usize];
 
-        callback(EngineEvent::IterationInfo(IterationInfo {
-            depth,
-            seldepth: ctx.seldepth,
-            score: score(result.score),
-            raw_score: result.score,
-            time: duration,
-            best_line: pv.clone(),
-            hashfull: tt_stats.hashfull,
-            tt_stats: mem::take(tt_stats),
-            qsearch_stats: ctx.qsearch_stats,
-            search_stats: SearchStats {
-                branching_factor: (ctx.search_stats.search_counters.nodes as f64)
-                    .powf(1f64 / depth as f64),
-                delta: ctx.search_stats.search_counters.nodes as i64
-                    - nodes_in_last_iteration as i64,
-                search_counters: ctx.search_stats.search_counters,
-            },
-        }));
+            let value = line.score;
+            let line: Vec<_> = lines[i as usize]
+                .pv
+                .into_iter()
+                .take_while(|x| x.is_some())
+                .map(Option::unwrap)
+                .collect();
+            let line = (!line.is_empty()).then_some(line);
+
+            let duration = start.elapsed();
+            let tt_stats = ctx.tt.stats();
+
+            callback(EngineEvent::IterationInfo(IterationInfo {
+                depth,
+                seldepth: ctx.seldepth,
+                multipv: i + 1,
+                score: score(value),
+                raw_score: value,
+                time: duration,
+                best_line: line,
+                hashfull: tt_stats.hashfull,
+                tt_stats: mem::take(tt_stats),
+                qsearch_stats: ctx.qsearch_stats,
+                search_stats: SearchStats {
+                    branching_factor: (ctx.search_stats.search_counters.nodes as f64)
+                        .powf(1f64 / depth as f64),
+                    delta: ctx.search_stats.search_counters.nodes as i64
+                        - nodes_in_last_iteration as i64,
+                    search_counters: ctx.search_stats.search_counters,
+                },
+            }));
+        }
 
         depth += 1;
         if limits.depth.is_some_and(|max_depth| depth > max_depth) {
@@ -118,8 +138,15 @@ where
         nodes_in_last_iteration = ctx.search_stats.search_counters.nodes;
     }
 
-    let best_move = pv.as_ref().and_then(|pv| pv.get(0).copied());
-    let ponder = pv.as_ref().and_then(|pv| pv.get(1).copied());
+    let chosen_line: Vec<_> = lines[0]
+        .pv
+        .into_iter()
+        .take_while(|x| x.is_some())
+        .map(Option::unwrap)
+        .collect();
+
+    let best_move = chosen_line.first().copied();
+    let ponder = chosen_line.get(1).copied();
 
     (best_move, ponder)
 }

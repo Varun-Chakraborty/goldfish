@@ -1,4 +1,5 @@
 use std::{
+    num::ParseIntError,
     sync::{Arc, atomic::AtomicBool},
     time::Instant,
 };
@@ -26,6 +27,10 @@ pub enum GoldFishError {
     InvalidMove(String),
     #[error("OpeningBookError: {0}")]
     OpeningBook(#[from] OpeningBookError),
+    #[error("Failed to parse as an integer")]
+    ParseIntError(#[from] ParseIntError),
+    #[error("Value out of range: {0} - {1}")]
+    OutOfRange(u32, u32),
 }
 
 const STARTPOS: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -37,6 +42,7 @@ pub struct GoldFish {
     clock: Clock,
     book: Option<OpeningBook>,
     ownbook: bool,
+    multipv: u8,
 }
 
 impl GoldFish {
@@ -48,13 +54,17 @@ impl GoldFish {
             book: None,
             clock: Clock::default(),
             ownbook: false,
+            multipv: 1,
         })
     }
 
     pub fn set_option(&mut self, name: &str, value: &str) -> Result<(), GoldFishError> {
         match name {
             "Hash" => {
-                let hash = value.parse().unwrap();
+                let hash = value.parse()?;
+                if hash < 1 {
+                    return Err(GoldFishError::OutOfRange(1, 1048576));
+                }
                 self.tt = Some(TranspositionTable::new(hash));
             }
             "OwnBook" => {
@@ -71,6 +81,13 @@ impl GoldFish {
                     return Ok(());
                 }
                 self.book = Some(OpeningBook::new(value)?);
+            }
+            "MultiPV" => {
+                let value = value.parse()?;
+                if value < 1 {
+                    return Err(GoldFishError::OutOfRange(1, 255));
+                }
+                self.multipv = value;
             }
             _ => {}
         }
@@ -124,6 +141,7 @@ impl GoldFish {
                         &mut self.tt,
                         &mut self.history,
                         &mut self.clock,
+                        self.multipv,
                         |_| (),
                     );
 
@@ -154,6 +172,7 @@ impl GoldFish {
             &mut self.tt,
             &mut self.history,
             &mut self.clock,
+            self.multipv,
             &mut callback,
         );
 

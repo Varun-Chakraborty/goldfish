@@ -10,7 +10,7 @@ use std::{
 
 use goldfish::{
     EngineCommand,
-    EngineEvent::{Debug, IterationInfo, SearchFinished},
+    EngineEvent::{CurrentMove, Debug, IterationInfo, SearchFinished},
     EngineLimits, EngineWorker, Score, UCIMessage,
 };
 
@@ -62,10 +62,11 @@ fn main() {
                             println!("id name GoldFish");
                             println!("id author Varun");
                             println!();
-                            println!("option name Hash type spin default 64 min 0 max 1048576");
+                            println!("option name Hash type spin default 64 min 1 max 1048576");
                             println!("option name Ponder type check default true");
                             println!("option name OwnBook type check default false");
                             println!("option name BookFile type string default ");
+                            println!("option name MultiPV type spin default 1 min 1 max 255");
                             println!("uciok");
                         }
                         Some("ucinewgame") => {
@@ -280,9 +281,10 @@ fn main() {
                 }
                 UCIMessage::Event(event) => match event {
                     IterationInfo(info) => println!(
-                        "info depth {} seldepth {} multipv 1 score {} nodes {} nps {} hashfull {} time {} pv {}",
+                        "info depth {} seldepth {} multipv {} score {} nodes {} nps {} hashfull {} time {} pv {}",
                         info.depth,
                         info.seldepth,
+                        info.multipv,
                         match info.score {
                             Score::CP(score) => format!("cp {score}"),
                             Score::Mate(score) => format!("mate {score}"),
@@ -300,6 +302,14 @@ fn main() {
                             .map(|m| m.to_algebraic())
                             .collect::<Vec<_>>()
                             .join(" ")
+                    ),
+                    CurrentMove {
+                        depth,
+                        move_,
+                        number,
+                    } => println!(
+                        "info depth {depth} currmove {} currmovenumber {number}",
+                        move_.to_algebraic()
                     ),
                     SearchFinished { best_move, ponder } => match (best_move, ponder) {
                         (Some(m), Some(p)) => {

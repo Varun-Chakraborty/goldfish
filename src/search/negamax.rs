@@ -25,7 +25,7 @@ pub fn negamax(
     ply: u32,
     mut alpha: i32,
     mut beta: i32,
-    pv: &Option<Vec<Move>>,
+    pv: Option<&[Option<Move>]>,
     pvpath: bool,
     search_type: SearchType,
     ctx: &mut SearchContext,
@@ -148,7 +148,9 @@ pub fn negamax(
         .probe(gs.zobrist, ply, None)
         .and_then(|entry| entry.best_move);
     let pv_best_move = pvpath
-        .then(|| pv.as_ref().and_then(|pv| pv.get(ply as usize).copied()))
+        .then(|| pv.map(|pv| pv.get(ply as usize).copied()))
+        .flatten()
+        .flatten()
         .flatten();
 
     ordermoves(
@@ -188,11 +190,7 @@ pub fn negamax(
                 -alpha - 1,
                 -alpha,
                 pv,
-                pvpath
-                    && pv
-                        .as_ref()
-                        .and_then(|pv| pv.get(ply as usize))
-                        .is_some_and(|bm| *bm == m),
+                pv_best_move.is_some_and(|bm| bm == m),
                 Scout,
                 ctx,
             );
@@ -218,11 +216,7 @@ pub fn negamax(
                     -alpha - 1,
                     -alpha,
                     pv,
-                    pvpath
-                        && pv
-                            .as_ref()
-                            .and_then(|pv| pv.get(ply as usize))
-                            .is_some_and(|bm| *bm == m),
+                    pv_best_move.is_some_and(|bm| bm == m),
                     Scout,
                     ctx,
                 );
@@ -243,11 +237,7 @@ pub fn negamax(
             -beta,
             -alpha,
             pv,
-            pvpath
-                && pv
-                    .as_ref()
-                    .and_then(|pv| pv.get(ply as usize))
-                    .is_some_and(|bm| *bm == m),
+            pv_best_move.is_some_and(|bm| bm == m),
             search_type,
             ctx,
         );

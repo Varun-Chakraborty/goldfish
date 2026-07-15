@@ -46,6 +46,11 @@ pub enum EngineEvent {
         best_move: Option<Move>,
         ponder: Option<Move>,
     },
+    CurrentMove {
+        depth: u32,
+        move_: Move,
+        number: usize,
+    },
     Debug {
         string: String,
     },

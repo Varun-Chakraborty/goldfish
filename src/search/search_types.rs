@@ -100,6 +100,7 @@ pub enum Score {
 pub struct IterationInfo {
     pub depth: u32,
     pub seldepth: u32,
+    pub multipv: u8,
     pub score: Score,
     pub raw_score: i32,
     pub best_line: Option<Vec<Move>>,
