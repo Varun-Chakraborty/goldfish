@@ -75,6 +75,7 @@ fn main() {
                         }
                         Some("isready") => println!("readyok"),
                         Some("q") | Some("quit") => {
+                            stop.store(true, Ordering::Relaxed);
                             if let Err(e) = cmd_sender.send(EngineCommand::Quit) {
                                 println!("{e}");
                             }
@@ -249,7 +250,9 @@ fn main() {
                         Some("ponderhit") => ponderhit.store(true, Ordering::Relaxed),
                         Some("setoption") => {
                             let mut name = vec![];
-                            if let Some(arg) = args.next() && arg == "name" {
+                            if let Some(arg) = args.next()
+                                && arg == "name"
+                            {
                                 while let Some(arg) = args.next()
                                     && arg != "value"
                                 {
@@ -284,8 +287,11 @@ fn main() {
                             Score::CP(score) => format!("cp {score}"),
                             Score::Mate(score) => format!("mate {score}"),
                         },
-                        info.nodes,
-                        info.nps,
+                        info.search_stats.search_counters.nodes + info.qsearch_stats.nodes,
+                        ((info.search_stats.search_counters.nodes + info.qsearch_stats.nodes)
+                            as f64
+                            / info.time.as_secs_f64())
+                        .ceil() as u64,
                         info.hashfull,
                         info.time.as_millis(),
                         info.best_line

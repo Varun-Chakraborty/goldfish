@@ -63,7 +63,7 @@ impl GoldFish {
                     return Ok(());
                 }
                 self.ownbook = value == "true";
-            },
+            }
             "BookFile" => {
                 if value.is_empty() {
                     self.book = None;
@@ -71,7 +71,7 @@ impl GoldFish {
                     return Ok(());
                 }
                 self.book = Some(OpeningBook::new(value)?);
-            },
+            }
             _ => {}
         }
 
@@ -103,7 +103,9 @@ impl GoldFish {
         F: FnMut(EngineEvent),
     {
         let gs = &mut self.gamestate;
-        if self.ownbook && let Some(book) = &self.book {
+        if self.ownbook
+            && let Some(book) = &self.book
+        {
             let legal_moves = gs.legal_moves(All);
             let m = book.choose(gs.zobrist, &legal_moves);
 
@@ -129,11 +131,17 @@ impl GoldFish {
                 });
                 gs.unmake_move(undo);
 
-                while pondering && !ponderhit.load(std::sync::atomic::Ordering::Relaxed) && !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                while pondering
+                    && !ponderhit.load(std::sync::atomic::Ordering::Relaxed)
+                    && !stop.load(std::sync::atomic::Ordering::Relaxed)
+                {
                     std::thread::sleep(std::time::Duration::from_millis(2));
                 }
 
-                callback(EngineEvent::SearchFinished { best_move: Some(best_move), ponder });
+                callback(EngineEvent::SearchFinished {
+                    best_move: Some(best_move),
+                    ponder,
+                });
                 return Ok(());
             }
         }

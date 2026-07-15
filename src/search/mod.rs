@@ -13,14 +13,19 @@ use std::{
 };
 
 use crate::{
-    EngineEvent, clock::Clock, game::{GameState, MoveGenMode}, history::HistoryHeuristic, search::{
+    EngineEvent,
+    clock::Clock,
+    game::{GameState, MoveGenMode},
+    history::HistoryHeuristic,
+    search::{
         negamax::negamax,
-        quiescence::quiescence,
         search_types::{
             EngineLimits, IterationInfo, PVTable, Score, SearchContext, SearchCounters,
             SearchStats, SearchType::FullSearch,
         },
-    }, transposition::TranspositionTable, types::Move,
+    },
+    transposition::TranspositionTable,
+    types::Move,
 };
 
 pub const MATE: i32 = 32000;
@@ -36,7 +41,8 @@ pub fn iterative_deepening<F>(
     history: &mut Option<HistoryHeuristic>,
     clock: &mut Clock,
     mut callback: F,
-) -> (Option<Move>, Option<Move>) where
+) -> (Option<Move>, Option<Move>)
+where
     F: FnMut(EngineEvent),
 {
     let tt = tt.get_or_insert_with(|| TranspositionTable::new(64));
@@ -91,22 +97,18 @@ pub fn iterative_deepening<F>(
             seldepth: ctx.seldepth,
             score: score(result.score),
             raw_score: result.score,
-            nodes: ctx.search_stats.search_counters.nodes + ctx.qsearch_stats.nodes,
-            nps: ((ctx.search_stats.search_counters.nodes + ctx.qsearch_stats.nodes) as f64
-                / duration.as_secs_f64())
-            .ceil() as u64,
             time: duration,
             best_line: pv.clone(),
             hashfull: tt_stats.hashfull,
             tt_stats: mem::take(tt_stats),
-            qsearch_stats: Some(ctx.qsearch_stats),
-            search_stats: Some(SearchStats {
+            qsearch_stats: ctx.qsearch_stats,
+            search_stats: SearchStats {
                 branching_factor: (ctx.search_stats.search_counters.nodes as f64)
                     .powf(1f64 / depth as f64),
                 delta: ctx.search_stats.search_counters.nodes as i64
                     - nodes_in_last_iteration as i64,
                 search_counters: ctx.search_stats.search_counters,
-            }),
+            },
         }));
 
         depth += 1;

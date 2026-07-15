@@ -8,7 +8,7 @@ use crate::{
     search::{
         DRAW, MATE,
         ordermoves::ordermoves,
-        quiescence,
+        quiescence::quiescence,
         search_types::{
             SearchContext, SearchResult,
             SearchType::{self, Scout},
@@ -50,9 +50,8 @@ pub fn negamax(
                 beta = beta.min(entry.score);
             }
         }
-        if alpha >= beta {
+        if alpha >= beta && search_type == Scout {
             ctx.search_stats.search_counters.cutoffs += 1;
-            ctx.pv_table.length[ply as usize] = 0;
             return SearchResult {
                 score: entry.score,
                 best_move: entry.best_move,

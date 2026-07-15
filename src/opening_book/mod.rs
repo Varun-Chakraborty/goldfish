@@ -59,27 +59,46 @@ impl OpeningBook {
     pub fn choose(&self, key: u64, legal_moves: &[Move]) -> Option<Move> {
         let lookup = self.lookup(key);
 
-        let moves = lookup.iter().filter_map(|e| {
-            let (from, to, promotion) = self.parse_move(e.move_);
-            let legal = legal_moves.iter().find(|m| {
-                let from_matches = m.from == from;
-                let to_matches = if let Some(side) = m.castle {
-                    match side {
-                        Kingside if from == Coordinate::new(4, 0) && to == Coordinate::new(7, 0) => true,
-                        Queenside if from == Coordinate::new(4, 0) && to == Coordinate::new(0, 0) => true,
-                        Kingside if from == Coordinate::new(4, 7) && to == Coordinate::new(7, 7) => true,
-                        Queenside if from == Coordinate::new(4, 7) && to == Coordinate::new(0, 7) => true,
-                        _ => false,
-                    }
-                } else {
-                    m.to == to
-                };
-                let promotion_matches = m.promotion == promotion;
+        let moves = lookup
+            .iter()
+            .filter_map(|e| {
+                let (from, to, promotion) = self.parse_move(e.move_);
+                let legal = legal_moves.iter().find(|m| {
+                    let from_matches = m.from == from;
+                    let to_matches = if let Some(side) = m.castle {
+                        match side {
+                            Kingside
+                                if from == Coordinate::new(4, 0) && to == Coordinate::new(7, 0) =>
+                            {
+                                true
+                            }
+                            Queenside
+                                if from == Coordinate::new(4, 0) && to == Coordinate::new(0, 0) =>
+                            {
+                                true
+                            }
+                            Kingside
+                                if from == Coordinate::new(4, 7) && to == Coordinate::new(7, 7) =>
+                            {
+                                true
+                            }
+                            Queenside
+                                if from == Coordinate::new(4, 7) && to == Coordinate::new(0, 7) =>
+                            {
+                                true
+                            }
+                            _ => false,
+                        }
+                    } else {
+                        m.to == to
+                    };
+                    let promotion_matches = m.promotion == promotion;
 
-                from_matches && to_matches && promotion_matches
-            });
-            legal.map(|&m| (m, e.weight))
-        }).collect::<Vec<_>>();
+                    from_matches && to_matches && promotion_matches
+                });
+                legal.map(|&m| (m, e.weight))
+            })
+            .collect::<Vec<_>>();
 
         let total = moves.iter().map(|(_, w)| w).sum();
 
@@ -88,7 +107,6 @@ impl OpeningBook {
         }
 
         let mut random = rand::random_range(0..total);
-
 
         for m in moves {
             if random < m.1 {

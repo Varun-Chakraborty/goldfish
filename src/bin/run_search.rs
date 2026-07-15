@@ -40,7 +40,7 @@ fn main() {
     thread::spawn(move || worker.run());
 
     // let fen = "3nr1R1/5kpp/2K5/7P/1R4p1/6P1/8/8 w - - 0 1"; // tactical position
-    let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1"; // starting position
+    let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"; // starting position
     // let fen = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1"; // kiwipete position
     let gs = GameState::from_fen(fen).unwrap();
     if let Err(e) = cmd_sender.send(EngineCommand::Init {
@@ -64,8 +64,6 @@ fn main() {
                     IterationInfo(info) => {
                         let best_line = info.best_line.as_ref().expect("No best moves");
                         let best_line = fmt_pgn_moves(&gs, best_line).join(", ");
-                        let search_stats = info.search_stats.expect("No search stats");
-                        let qsearch_stats = info.qsearch_stats.expect("No quiescence search stats");
                         println!("d{} score: {}", info.depth, info.raw_score);
                         println!("PV: {}", best_line);
                         println!();
@@ -74,9 +72,9 @@ fn main() {
                             "Nodes",
                             format!(
                                 "{}n ({}n) @ {:.2}Mn/s",
-                                fmt_numbers(search_stats.search_counters.nodes),
-                                fmt_delta(search_stats.delta),
-                                search_stats.search_counters.nodes as f64
+                                fmt_numbers(info.search_stats.search_counters.nodes),
+                                fmt_delta(info.search_stats.delta),
+                                info.search_stats.search_counters.nodes as f64
                                     / info.time.as_secs_f64()
                                     / 1_000_000.0,
                             ),
@@ -85,8 +83,10 @@ fn main() {
                             "QNodes",
                             format!(
                                 "{}n @ {:.2}Mn/s",
-                                fmt_numbers(qsearch_stats.nodes),
-                                qsearch_stats.nodes as f64 / info.time.as_secs_f64() / 1_000_000.0,
+                                fmt_numbers(info.qsearch_stats.nodes),
+                                info.qsearch_stats.nodes as f64
+                                    / info.time.as_secs_f64()
+                                    / 1_000_000.0,
                             ),
                         );
                         stat(
@@ -103,33 +103,33 @@ fn main() {
                             "Leaf %",
                             format!(
                                 "{:.2}",
-                                search_stats.search_counters.leaf_nodes as f64
-                                    / search_stats.search_counters.nodes as f64
+                                info.search_stats.search_counters.leaf_nodes as f64
+                                    / info.search_stats.search_counters.nodes as f64
                                     * 100.0,
                             ),
                         );
-                        stat("EBF", format!("{:.2}", search_stats.branching_factor));
+                        stat("EBF", format!("{:.2}", info.search_stats.branching_factor));
                         stat(
                             "MPC",
                             format!(
                                 "{:.2}",
-                                search_stats.search_counters.examined_moves as f64
-                                    / (search_stats.search_counters.cutoffs).max(1) as f64,
+                                info.search_stats.search_counters.examined_moves as f64
+                                    / (info.search_stats.search_counters.cutoffs).max(1) as f64,
                             ),
                         );
                         stat(
                             "1st Cutoff",
                             format!(
                                 "{}",
-                                fmt_numbers(search_stats.search_counters.first_move_cutoffs),
+                                fmt_numbers(info.search_stats.search_counters.first_move_cutoffs),
                             ),
                         );
                         stat(
                             "Moves Examined",
                             format!(
                                 "{:.2}",
-                                search_stats.search_counters.examined_moves as f64
-                                    / search_stats.search_counters.available_moves as f64,
+                                info.search_stats.search_counters.examined_moves as f64
+                                    / info.search_stats.search_counters.available_moves as f64,
                             ),
                         );
                         println!();
@@ -138,16 +138,17 @@ fn main() {
                             "Reduced",
                             format!(
                                 "{:>6}",
-                                fmt_numbers(search_stats.search_counters.reduced_searches),
+                                fmt_numbers(info.search_stats.search_counters.reduced_searches),
                             ),
                         );
                         stat(
                             "Fail Low",
                             format!(
                                 "{:>6} ({:>6.2}%)",
-                                fmt_numbers(search_stats.search_counters.reduced_fail_low),
-                                search_stats.search_counters.reduced_fail_low as f64
-                                    / search_stats.search_counters.reduced_searches.max(1) as f64
+                                fmt_numbers(info.search_stats.search_counters.reduced_fail_low),
+                                info.search_stats.search_counters.reduced_fail_low as f64
+                                    / info.search_stats.search_counters.reduced_searches.max(1)
+                                        as f64
                                     * 100.0
                             ),
                         );
@@ -155,9 +156,10 @@ fn main() {
                             "Fail High",
                             format!(
                                 "{:>6} ({:>6.2}%)",
-                                fmt_numbers(search_stats.search_counters.reduced_fail_high),
-                                search_stats.search_counters.reduced_fail_high as f64
-                                    / search_stats.search_counters.reduced_searches.max(1) as f64
+                                fmt_numbers(info.search_stats.search_counters.reduced_fail_high),
+                                info.search_stats.search_counters.reduced_fail_high as f64
+                                    / info.search_stats.search_counters.reduced_searches.max(1)
+                                        as f64
                                     * 100.0
                             ),
                         );
@@ -165,9 +167,10 @@ fn main() {
                             "Verify Low",
                             format!(
                                 "{:>6} ({:>6.2}%)",
-                                fmt_numbers(search_stats.search_counters.verified_fail_low),
-                                search_stats.search_counters.verified_fail_low as f64
-                                    / search_stats.search_counters.reduced_fail_high.max(1) as f64
+                                fmt_numbers(info.search_stats.search_counters.verified_fail_low),
+                                info.search_stats.search_counters.verified_fail_low as f64
+                                    / info.search_stats.search_counters.reduced_fail_high.max(1)
+                                        as f64
                                     * 100.0
                             ),
                         );
@@ -175,9 +178,10 @@ fn main() {
                             "Verify High",
                             format!(
                                 "{:>6} ({:>6.2}%)",
-                                fmt_numbers(search_stats.search_counters.verified_fail_high),
-                                search_stats.search_counters.verified_fail_high as f64
-                                    / search_stats.search_counters.reduced_fail_high.max(1) as f64
+                                fmt_numbers(info.search_stats.search_counters.verified_fail_high),
+                                info.search_stats.search_counters.verified_fail_high as f64
+                                    / info.search_stats.search_counters.reduced_fail_high.max(1)
+                                        as f64
                                     * 100.0
                             ),
                         );

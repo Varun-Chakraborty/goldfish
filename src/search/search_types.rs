@@ -103,12 +103,10 @@ pub struct IterationInfo {
     pub score: Score,
     pub raw_score: i32,
     pub best_line: Option<Vec<Move>>,
-    pub nodes: u64,
     pub time: Duration,
-    pub nps: u64,
     pub hashfull: u64,
-    pub qsearch_stats: Option<SearchCounters>,
-    pub search_stats: Option<SearchStats>,
+    pub qsearch_stats: SearchCounters,
+    pub search_stats: SearchStats,
     pub tt_stats: TTStats,
 }
 
