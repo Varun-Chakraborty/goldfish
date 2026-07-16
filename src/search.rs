@@ -8,10 +8,10 @@ use std::{
 
 use crate::{
     eval::eval,
-    game::GameState,
+    game::{GameState, MoveGenMode},
     position::{DrawReason::*, Position, PositionStatus::*},
     transposition::{Bound, TTEntry, TranspositionTable},
-    types::Move,
+    types::{Color, Move},
 };
 const MATE: i32 = 32000;
 const MATE_THRESHOLD: i32 = 31744;
@@ -27,7 +27,7 @@ struct SearchContext<'a> {
 impl<'a> SearchContext<'a> {
     #[inline]
     pub fn should_stop(&self) -> bool {
-        if self.search_stats.search_counters.nodes.is_multiple_of(2048) {
+        if (self.search_stats.search_counters.nodes + self.search_stats.search_counters.qnodes).is_multiple_of(2048) {
             return self.stop.load(Ordering::Relaxed);
         }
 
@@ -59,7 +59,9 @@ pub struct IterationInfo {
 
 #[derive(Default, Clone, Copy)]
 pub struct SearchCounters {
+    pub qnodes: u64,
     pub nodes: u64,
+    pub leaf_nodes: u64,
     pub examined_moves: u64,
     pub cutoffs: u64,
     pub available_moves: u64,
@@ -77,6 +79,108 @@ impl SearchStats {
     pub fn new() -> Self {
         Self::default()
     }
+}
+
+fn quiescence(
+    gs: &mut GameState,
+    ply: u32,
+    depth: u32,
+    mut alpha: i32,
+    beta: i32,
+    search_context: &mut SearchContext,
+) -> SearchResult {
+    let position = Position::quick_draw_analysis(gs);
+    search_context.search_stats.search_counters.qnodes += 1;
+
+    if position != Ongoing {
+        return SearchResult {
+            score: match position {
+                Draw(FiftyMoveRule) | Draw(ThreefoldRepetition) => DRAW,
+                Draw(InsufficientMaterial) => DRAW,
+                _ => unreachable!(),
+            },
+            best_move: None,
+        };
+    }
+
+    let in_check = gs.in_check(gs.turn);
+
+    if !in_check {
+        let stand_pat = match gs.turn {
+            Color::White => eval(gs).0,
+            Color::Black => -eval(gs).0,
+        };
+
+        if stand_pat >= beta {
+            return SearchResult {
+                score: beta,
+                best_move: None,
+            };
+        }
+
+        alpha = alpha.max(stand_pat);
+    }
+
+    let mut legal = if in_check {
+        let position = Position::analyse(gs);
+        if position.status == Ongoing
+            && let Some(moves) = position.legal_moves
+        {
+            moves
+        } else if position.status == Checkmate {
+            return SearchResult {
+                score: -MATE + ply as i32,
+                best_move: None,
+            };
+        } else {
+            return SearchResult {
+                score: DRAW,
+                best_move: None,
+            };
+        }
+    }
+    /*  else if depth < 2 {
+        gs.legal_moves(MoveGenMode::All)
+    } */
+    else {
+        gs.legal_moves(MoveGenMode::CaptureOnly)
+    };
+
+    legal.sort_by_key(|m| m.captured.is_none());
+    let total_moves = legal.len();
+    search_context.search_stats.search_counters.available_moves += total_moves as u64;
+
+    let mut search_result = SearchResult {
+        score: alpha,
+        best_move: None,
+    };
+
+    for m in legal {
+        if search_context.should_stop() {
+            search_context.stopped = true;
+            return search_result;
+        }
+        let undo = gs.make_move(m);
+        let result = quiescence(gs, ply + 1, depth + 1, -beta, -alpha, search_context);
+        gs.unmake_move(undo);
+        if search_context.stopped {
+            return search_result;
+        }
+        let score = -result.score;
+
+        search_context.search_stats.search_counters.examined_moves += 1;
+        if score >= beta {
+            search_context.search_stats.search_counters.cutoffs += 1;
+            search_result.score = beta;
+            return search_result;
+        }
+        if score > alpha {
+            alpha = score;
+        }
+    }
+
+    search_result.score = alpha;
+    search_result
 }
 
 fn negamax(
@@ -116,10 +220,8 @@ fn negamax(
     }
 
     if depth == 0 {
-        return SearchResult {
-            score: eval(gs).0,
-            best_move: None,
-        };
+        search_context.search_stats.search_counters.leaf_nodes += 1;
+        return quiescence(gs, ply, 0, alpha, beta, search_context);
     }
 
     let position = Position::analyse(gs);

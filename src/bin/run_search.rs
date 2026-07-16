@@ -45,10 +45,11 @@ fn main() {
                                 .join(", ");
                         let search_stats = info.search_stats.expect("No search stats");
                         println!(
-                            "d{} score: {} line: {} nodes: {} nps: {:.2} branching_factor: {:.2} examined_moves per cutoff: {:.2} examined_moves per available move: {:.2} hit rate: {:.5}, exact hit rate: {:.5}",
+                            "d{} score: {} line: {} qnodes per leaf: {:.2} nodes: {} nps: {:.2} branching_factor: {:.2} examined_moves per cutoff: {:.2} examined_moves per available move: {:.2} hit rate: {:.5}, exact hit rate: {:.5}",
                             info.depth,
                             info.raw_score,
                             best_line,
+                            search_stats.search_counters.qnodes as f64 / search_stats.search_counters.leaf_nodes as f64,
                             search_stats.search_counters.nodes,
                             info.nps,
                             search_stats.branching_factor,
