@@ -5,6 +5,7 @@ mod notation;
 mod perft;
 mod position;
 mod search;
+mod transposition;
 mod types;
 mod zobrist;
 
@@ -107,11 +108,12 @@ enum GoldFishError {
 
 struct GoldFish {
     gamestate: Option<GameState>,
+    tt: Option<transposition::TranspositionTable>
 }
 
 impl GoldFish {
     fn new_engine() -> Self {
-        Self { gamestate: None }
+        Self { gamestate: None, tt: None }
     }
 
     fn new_position_from_fen(&mut self, fen: &str) -> Result<(), GoldFishError> {
@@ -129,7 +131,7 @@ impl GoldFish {
         F: FnMut(EngineEvent),
     {
         match &mut self.gamestate {
-            Some(gs) => search(gs, limits, stop, callback),
+            Some(gs) => search(gs, limits, stop, &mut self.tt, callback),
             None => return Err(GoldFishError::GameStateNotInitialised),
         };
         Ok(())

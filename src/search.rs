@@ -10,9 +10,9 @@ use crate::{
     eval::eval,
     game::GameState,
     position::{DrawReason::*, Position, PositionStatus::*},
+    transposition::{Bound, TTEntry, TranspositionTable},
     types::Move,
 };
-
 const MATE: i32 = 32000;
 const MATE_THRESHOLD: i32 = 31744;
 const DRAW: i32 = 0;
@@ -20,13 +20,14 @@ const DRAW: i32 = 0;
 struct SearchContext<'a> {
     stopped: bool,
     search_stats: SearchStats,
+    tt: &'a mut TranspositionTable,
     stop: &'a Arc<AtomicBool>,
 }
 
 impl<'a> SearchContext<'a> {
     #[inline]
     pub fn should_stop(&self) -> bool {
-        if (self.search_stats.search_counters.nodes).is_multiple_of(2048) {
+        if self.search_stats.search_counters.nodes.is_multiple_of(2048) {
             return self.stop.load(Ordering::Relaxed);
         }
 
@@ -68,6 +69,8 @@ pub struct SearchCounters {
 pub struct SearchStats {
     pub search_counters: SearchCounters,
     pub branching_factor: f64,
+    pub tt_hit_rate: f64,
+    pub tt_exact_hit_rate: f64,
 }
 
 impl SearchStats {
@@ -81,10 +84,37 @@ fn negamax(
     depth: u32,
     ply: u32,
     mut alpha: i32,
-    beta: i32,
+    mut beta: i32,
     search_context: &mut SearchContext,
 ) -> SearchResult {
+    let org_alpha = alpha;
+    let org_beta = beta;
     search_context.search_stats.search_counters.nodes += 1;
+
+    if let Some(entry) = search_context.tt.probe(gs.zobrist, ply, Some(depth)) {
+        match entry.bound {
+            Bound::Exact => {
+                return SearchResult {
+                    score: entry.score,
+                    best_move: entry.best_move,
+                };
+            }
+            Bound::Lower => {
+                alpha = alpha.max(entry.score);
+            }
+            Bound::Upper => {
+                beta = beta.min(entry.score);
+            }
+        }
+        if alpha >= beta {
+            search_context.search_stats.search_counters.cutoffs += 1;
+            return SearchResult {
+                score: entry.score,
+                best_move: entry.best_move,
+            };
+        }
+    }
+
     if depth == 0 {
         return SearchResult {
             score: eval(gs).0,
@@ -99,7 +129,18 @@ fn negamax(
                 score: -MATE + ply as i32,
                 best_move: None,
             };
-            
+
+            search_context.tt.store(
+                gs.zobrist,
+                ply,
+                TTEntry {
+                    key: gs.zobrist,
+                    depth,
+                    score: search_result.score,
+                    best_move: search_result.best_move,
+                    bound: Bound::Exact,
+                },
+            );
             return search_result;
         }
         Draw(Stalemate) | Draw(InsufficientMaterial) => {
@@ -107,7 +148,18 @@ fn negamax(
                 score: DRAW,
                 best_move: None,
             };
-            
+
+            search_context.tt.store(
+                gs.zobrist,
+                ply,
+                TTEntry {
+                    key: gs.zobrist,
+                    depth,
+                    score: search_result.score,
+                    best_move: search_result.best_move,
+                    bound: Bound::Exact,
+                },
+            );
             return search_result;
         }
         Draw(FiftyMoveRule) | Draw(ThreefoldRepetition) => {
@@ -125,11 +177,19 @@ fn negamax(
     };
 
     let mut legal = position.legal_moves.expect("No legal moves");
-    let total_moves = legal.len();
 
     legal.sort_by_key(|m| m.captured.is_none());
+    let total_moves = legal.len();
 
     search_context.search_stats.search_counters.available_moves += total_moves as u64;
+
+    if let Some(entry) = search_context.tt.probe(gs.zobrist, ply, None)
+        && let Some(bm) = entry.best_move
+        && let Some(index) = legal.iter().position(|&m| m == bm)
+    {
+        let m = legal.remove(index);
+        legal.insert(0, m);
+    }
 
     for m in legal {
         if search_context.should_stop() {
@@ -139,8 +199,16 @@ fn negamax(
                 best_move: search_result.best_move,
             };
         }
+
         let undo = gs.make_move(m);
-        let mut result = negamax(gs, depth - 1, ply + 1, -beta, -alpha, search_context);
+        let mut result = negamax(
+            gs,
+            depth - 1,
+            ply + 1,
+            -beta,
+            -alpha,
+            search_context,
+        );
         gs.unmake_move(undo);
 
         if search_context.stopped {
@@ -158,12 +226,29 @@ fn negamax(
         }
         alpha = alpha.max(search_result.score);
         search_context.search_stats.search_counters.examined_moves += 1;
-        
         if alpha >= beta {
             search_context.search_stats.search_counters.cutoffs += 1;
             break;
         }
     }
+
+    search_context.tt.store(
+        gs.zobrist,
+        ply,
+        TTEntry {
+            key: gs.zobrist,
+            depth,
+            score: search_result.score,
+            best_move: search_result.best_move,
+            bound: if search_result.score >= org_beta {
+                Bound::Lower
+            } else if search_result.score <= org_alpha {
+                Bound::Upper
+            } else {
+                Bound::Exact
+            },
+        },
+    );
 
     search_result
 }
@@ -178,15 +263,22 @@ pub struct EngineLimits {
     pub depth: Option<u32>,
 }
 
-pub fn search<F>(gs: &mut GameState, limits: EngineLimits, stop: &Arc<AtomicBool>, mut callback: F)
-where
+pub fn search<F>(
+    gs: &mut GameState,
+    limits: EngineLimits,
+    stop: &Arc<AtomicBool>,
+    tt: &mut Option<TranspositionTable>,
+    mut callback: F,
+) where
     F: FnMut(EngineEvent),
 {
     let depth = limits.depth.unwrap_or(256);
+    let tt = tt.get_or_insert_with(|| TranspositionTable::new_table(64, MATE_THRESHOLD));
 
     let mut search_context = SearchContext {
         stopped: false,
         stop,
+        tt,
         search_stats: SearchStats::new(),
     };
 
@@ -206,6 +298,8 @@ where
             .ceil() as u64,
         best_line: result.best_move.map(|m| vec![m]),
         search_stats: Some(SearchStats {
+            tt_hit_rate: search_context.tt.hit_rate(),
+            tt_exact_hit_rate: search_context.tt.exact_hit_rate(),
             branching_factor: (search_context.search_stats.search_counters.nodes as f64)
                 .powf(1f64 / depth as f64),
             search_counters: search_context.search_stats.search_counters,

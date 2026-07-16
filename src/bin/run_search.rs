@@ -45,7 +45,7 @@ fn main() {
                                 .join(", ");
                         let search_stats = info.search_stats.expect("No search stats");
                         println!(
-                            "d{} score: {} line: {} nodes: {} nps: {:.2} branching_factor: {:.2} examined_moves per cutoff: {:.2} examined_moves per available move: {:.2}",
+                            "d{} score: {} line: {} nodes: {} nps: {:.2} branching_factor: {:.2} examined_moves per cutoff: {:.2} examined_moves per available move: {:.2} hit rate: {:.5}, exact hit rate: {:.5}",
                             info.depth,
                             info.raw_score,
                             best_line,
@@ -54,6 +54,8 @@ fn main() {
                             search_stats.branching_factor,
                             search_stats.search_counters.examined_moves as f64 / (search_stats.search_counters.cutoffs).max(1) as f64,
                             search_stats.search_counters.examined_moves as f64 / search_stats.search_counters.available_moves as f64,
+                            search_stats.tt_hit_rate,
+                            search_stats.tt_exact_hit_rate
                         )
                     }
                     SearchFinished(_) => {
