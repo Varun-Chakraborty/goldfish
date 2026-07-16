@@ -1,4 +1,5 @@
 mod board;
+mod eval;
 mod game;
 mod notation;
 mod perft;
