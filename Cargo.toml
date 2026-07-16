@@ -6,6 +6,7 @@ edition = "2024"
 default-run = "goldfish"
 
 [dependencies]
+rand = "0.10.1"
 thiserror = "2.0.18"
 
 [profile.release]

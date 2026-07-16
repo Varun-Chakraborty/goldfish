@@ -5,6 +5,7 @@ mod notation;
 mod perft;
 mod search;
 mod types;
+mod zobrist;
 
 use std::sync::{Arc, atomic::AtomicBool, mpsc};
 use thiserror::Error;

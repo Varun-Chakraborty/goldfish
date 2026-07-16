@@ -1,4 +1,9 @@
-use crate::{GameState, game::MoveGenMode, notation::fmt_pgn_moves};
+use crate::{
+    GameState,
+    notation::fmt_pgn_moves,
+    game::MoveGenMode,
+    zobrist::compute_hash,
+};
 
 #[allow(dead_code)]
 pub fn perft(gs: &mut GameState, depth: u32) -> u64 {
@@ -11,6 +16,7 @@ pub fn perft(gs: &mut GameState, depth: u32) -> u64 {
 
     for m in legal {
         let undo = gs.make_move(m);
+        debug_assert_eq!(gs.zobrist, compute_hash(gs));
         count += perft(gs, depth - 1);
         gs.unmake_move(undo);
     }

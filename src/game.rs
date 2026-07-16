@@ -2,7 +2,13 @@ use std::num::ParseIntError;
 
 use crate::{
     board::{Board, BoardError},
-    types::{CastleSide, CastlingRights, Color, ColorError, Coordinate, Move, PieceType, Square},
+    types::{
+        CastleSide, CastlingRights, Color, ColorError, Coordinate, Move,
+        PieceType, Square,
+    },
+    zobrist::{
+        compute_hash, get_black_to_move, get_castling_rights, get_en_passant_files, get_piece_sq,
+    },
 };
 use thiserror::Error;
 
@@ -39,6 +45,8 @@ pub struct GameState {
     halfmove_clock: u32,
     pub fullmove_number: u32,
     pub kings: (Coordinate, Coordinate),
+    pub zobrist: u64,
+    pub history: Vec<u64>,
     material_count: [u8; 10],
 }
 
@@ -91,10 +99,14 @@ impl GameState {
             halfmove_clock,
             fullmove_number,
             kings,
+            history: Vec::new(),
+            zobrist: 0,
             material_count: [0; 10],
         };
         gs.count_material();
 
+        let zobrist = compute_hash(&gs);
+        gs.zobrist = zobrist;
         Ok(gs)
     }
 
@@ -604,8 +616,12 @@ impl GameState {
         }
         self.board
             .set(Coordinate::new_coordinate(4, rank), Square::Empty);
+        self.zobrist ^=
+            get_piece_sq(PieceType::King, us, Coordinate::new_coordinate(4, rank));
         self.board
             .set(Coordinate::new_coordinate(7, rank), Square::Empty);
+        self.zobrist ^=
+            get_piece_sq(PieceType::Rook, us, Coordinate::new_coordinate(7, rank));
 
         self.board.set(
             Coordinate::new_coordinate(6, rank),
@@ -614,6 +630,8 @@ impl GameState {
                 piece: PieceType::King,
             },
         );
+        self.zobrist ^=
+            get_piece_sq(PieceType::King, us, Coordinate::new_coordinate(6, rank));
         self.board.set(
             Coordinate::new_coordinate(5, rank),
             Square::Occupied {
@@ -621,6 +639,8 @@ impl GameState {
                 piece: PieceType::Rook,
             },
         );
+        self.zobrist ^=
+            get_piece_sq(PieceType::Rook, us, Coordinate::new_coordinate(5, rank));
     }
 
     fn apply_queenside_castle(&mut self, us: Color, rank: u8) {
@@ -630,8 +650,12 @@ impl GameState {
         }
         self.board
             .set(Coordinate::new_coordinate(4, rank), Square::Empty);
+        self.zobrist ^=
+            get_piece_sq(PieceType::King, us, Coordinate::new_coordinate(4, rank));
         self.board
             .set(Coordinate::new_coordinate(0, rank), Square::Empty);
+        self.zobrist ^=
+            get_piece_sq(PieceType::Rook, us, Coordinate::new_coordinate(0, rank));
 
         self.board.set(
             Coordinate::new_coordinate(2, rank),
@@ -640,6 +664,8 @@ impl GameState {
                 piece: PieceType::King,
             },
         );
+        self.zobrist ^=
+            get_piece_sq(PieceType::King, us, Coordinate::new_coordinate(2, rank));
         self.board.set(
             Coordinate::new_coordinate(3, rank),
             Square::Occupied {
@@ -647,6 +673,8 @@ impl GameState {
                 piece: PieceType::Rook,
             },
         );
+        self.zobrist ^=
+            get_piece_sq(PieceType::Rook, us, Coordinate::new_coordinate(3, rank));
     }
 
     pub fn make_move(&mut self, m: Move) -> Undo {
@@ -656,6 +684,8 @@ impl GameState {
             halfmove_clock: self.halfmove_clock,
             move_info: m,
         };
+        self.history.push(self.zobrist);
+        self.zobrist ^= get_black_to_move();
 
         let us = self.turn;
         let them = us.opponent();
@@ -665,6 +695,9 @@ impl GameState {
             self.fullmove_number += 1;
         }
 
+        if let Some(coord) = self.en_passant {
+            self.zobrist ^= get_en_passant_files(coord.file());
+        }
         self.en_passant = None;
 
         if let Some(castle) = m.castle {
@@ -676,7 +709,12 @@ impl GameState {
                 CastleSide::Kingside => self.apply_kingside_castle(us, rank),
                 CastleSide::Queenside => self.apply_queenside_castle(us, rank),
             }
-
+            if self.can_castle_kingside(us) {
+                self.zobrist ^= get_castling_rights(us, CastleSide::Kingside);
+            }
+            if self.can_castle_queenside(us) {
+                self.zobrist ^= get_castling_rights(us, CastleSide::Queenside);
+            }
             self.set_castle(us, false, false);
             return undo;
         }
@@ -691,7 +729,7 @@ impl GameState {
                 } else {
                     m.to
                 };
-
+                self.zobrist ^= get_piece_sq(piece, them, coord);
                 self.remove_material(piece, them, 1);
 
                 self.board.set(coord, Square::Empty);
@@ -701,12 +739,18 @@ impl GameState {
                     Color::Black => 7,
                 };
                 if m.to.file() == 0 && m.to.rank() == rank {
+                    if self.can_castle_queenside(them) {
+                        self.zobrist ^= get_castling_rights(them, CastleSide::Queenside);
+                    }
                     match them {
                         Color::White => self.castling_rights.queenside_white = false,
                         Color::Black => self.castling_rights.queenside_black = false,
                     }
                 }
                 if m.to.file() == 7 && m.to.rank() == rank {
+                    if self.can_castle_kingside(them) {
+                        self.zobrist ^= get_castling_rights(them, CastleSide::Kingside);
+                    }
                     match them {
                         Color::White => self.castling_rights.kingside_white = false,
                         Color::Black => self.castling_rights.kingside_black = false,
@@ -725,10 +769,17 @@ impl GameState {
                     m.from.file(),
                     (m.from.rank() as i8 + dir.signum()) as u8,
                 ));
+                self.zobrist ^= get_en_passant_files(m.from.file());
             }
         }
 
         if moving_piece == PieceType::King {
+            if self.can_castle_kingside(us) {
+                self.zobrist ^= get_castling_rights(us, CastleSide::Kingside);
+            }
+            if self.can_castle_queenside(us) {
+                self.zobrist ^= get_castling_rights(us, CastleSide::Queenside);
+            }
             self.set_castle(us, false, false);
             match us {
                 Color::White => self.kings.0 = m.to,
@@ -742,12 +793,18 @@ impl GameState {
                 Color::Black => 7,
             };
             if m.from == Coordinate::new_coordinate(0, rank) {
+                if self.can_castle_queenside(us) {
+                    self.zobrist ^= get_castling_rights(us, CastleSide::Queenside);
+                }
                 match us {
                     Color::White => self.castling_rights.queenside_white = false,
                     Color::Black => self.castling_rights.queenside_black = false,
                 }
             }
             if m.from == Coordinate::new_coordinate(7, rank) {
+                if self.can_castle_kingside(us) {
+                    self.zobrist ^= get_castling_rights(us, CastleSide::Kingside);
+                }
                 match us {
                     Color::White => self.castling_rights.kingside_white = false,
                     Color::Black => self.castling_rights.kingside_black = false,
@@ -757,6 +814,7 @@ impl GameState {
 
         self.board.set(m.to, self.board.get(m.from));
         self.board.set(m.from, Square::Empty);
+        self.zobrist ^= get_piece_sq(moving_piece, us, m.from);
 
         if let Some(promo) = m.promotion {
             self.board.set(
@@ -766,9 +824,11 @@ impl GameState {
                     piece: promo,
                 },
             );
-
+            self.zobrist ^= get_piece_sq(promo, us, m.to);
             self.add_material(promo, us, 1);
             self.remove_material(moving_piece, us, 1);
+        } else {
+            self.zobrist ^= get_piece_sq(moving_piece, us, m.to);
         }
 
         if is_pawn_move || is_capture {
@@ -834,6 +894,10 @@ impl GameState {
         let them = self.turn;
         let us = them.opponent();
         self.turn = us;
+        self.zobrist = self
+            .history
+            .pop()
+            .expect("No history found while unmaking move");
 
         if us == Color::Black {
             self.fullmove_number -= 1;
