@@ -345,4 +345,571 @@ impl GameState {
         };
         self.is_attacked(king, color.opponent())
     }
+
+    fn pawn_moves(&self, from: Coordinate, color: Color, moves: &mut Vec<Move>) {
+        let (dir, start_rank, promo_rank) = match color {
+            Color::White => (1i8, 1u8, 7u8),
+            Color::Black => (-1i8, 6u8, 0u8),
+        };
+
+        if let Some(to) = from.checked_offset(0, dir)
+            && self.board.get(to) == Square::Empty
+        {
+            if to.rank() == promo_rank {
+                for &p in &[
+                    PieceType::Queen,
+                    PieceType::Rook,
+                    PieceType::Bishop,
+                    PieceType::Knight,
+                ] {
+                    moves.push(Move::new_promotion(from, to, p));
+                }
+            } else {
+                moves.push(Move::new(from, to, PieceType::Pawn));
+            }
+
+            if from.rank() == start_rank
+                && let Some(to2) = from.checked_offset(0, 2 * dir)
+                && self.board.get(to2) == Square::Empty
+            {
+                moves.push(Move::new(from, to2, PieceType::Pawn));
+            }
+        }
+
+        for df in [-1i8, 1i8] {
+            if let Some(to) = from.checked_offset(df, dir) {
+                match self.board.get(to) {
+                    Square::Occupied { color: c, piece } if c != color => {
+                        if to.rank() == promo_rank {
+                            for &p in &[
+                                PieceType::Queen,
+                                PieceType::Rook,
+                                PieceType::Bishop,
+                                PieceType::Knight,
+                            ] {
+                                moves.push(Move::new_promotion_and_capture(from, to, p, piece));
+                            }
+                        } else {
+                            moves.push(Move::new_capture(from, to, PieceType::Pawn, piece));
+                        }
+                    }
+                    _ => {}
+                }
+
+                if self.en_passant == Some(to) {
+                    moves.push(Move::new_en_passant(from, to));
+                }
+            }
+        }
+    }
+
+    fn knight_moves(&self, from: Coordinate, color: Color, moves: &mut Vec<Move>) {
+        let offsets = [
+            (1, 2),
+            (2, 1),
+            (2, -1),
+            (1, -2),
+            (-1, -2),
+            (-2, -1),
+            (-2, 1),
+            (-1, 2),
+        ];
+        for (df, dr) in &offsets {
+            if let Some(to) = from.checked_offset(*df, *dr) {
+                match self.board.get(to) {
+                    Square::Occupied { color: c, .. } if c == color => continue,
+                    Square::Occupied { piece, .. } => {
+                        moves.push(Move::new_capture(from, to, PieceType::Knight, piece))
+                    }
+                    _ => moves.push(Move::new(from, to, PieceType::Knight)),
+                }
+            }
+        }
+    }
+
+    fn sliding_moves(
+        &self,
+        from: Coordinate,
+        color: Color,
+        piece: PieceType,
+        moves: &mut Vec<Move>,
+    ) {
+        static BISHOP_DIRS: &[(i8, i8)] = &[(1, 1), (1, -1), (-1, 1), (-1, -1)];
+        static ROOK_DIRS: &[(i8, i8)] = &[(0, 1), (1, 0), (0, -1), (-1, 0)];
+        static QUEEN_DIRS: &[(i8, i8)] = &[
+            (0, 1),
+            (1, 0),
+            (0, -1),
+            (-1, 0),
+            (1, 1),
+            (1, -1),
+            (-1, 1),
+            (-1, -1),
+        ];
+
+        let directions = match piece {
+            PieceType::Bishop => BISHOP_DIRS,
+            PieceType::Rook => ROOK_DIRS,
+            PieceType::Queen => QUEEN_DIRS,
+            _ => unreachable!(),
+        };
+
+        for &(df, dr) in directions {
+            let mut cur = from;
+            while let Some(to) = cur.checked_offset(df, dr) {
+                cur = to;
+                match self.board.get(cur) {
+                    Square::Empty => moves.push(Move::new(from, cur, piece)),
+                    Square::Occupied {
+                        color: c,
+                        piece: captured,
+                    } if c != color => {
+                        moves.push(Move::new_capture(from, cur, piece, captured));
+                        break;
+                    }
+                    _ => break,
+                }
+            }
+        }
+    }
+
+    fn king_moves(&self, from: Coordinate, color: Color, moves: &mut Vec<Move>) {
+        for df in -1i8..=1 {
+            for dr in -1i8..=1 {
+                if df == 0 && dr == 0 {
+                    continue;
+                }
+                if let Some(to) = from.checked_offset(df, dr) {
+                    match self.board.get(to) {
+                        Square::Occupied { color: c, .. } if c == color => continue,
+                        Square::Occupied { piece, .. } => {
+                            moves.push(Move::new_capture(from, to, PieceType::King, piece))
+                        }
+                        _ => moves.push(Move::new(from, to, PieceType::King)),
+                    }
+                }
+            }
+        }
+
+        let rank: u8 = match color {
+            Color::White => 0,
+            Color::Black => 7,
+        };
+
+        if self.can_castle_kingside(color) {
+            let king_sq = Coordinate::new_coordinate(4, rank);
+            let between_empty = [
+                Coordinate::new_coordinate(5, rank),
+                Coordinate::new_coordinate(6, rank),
+            ];
+            if from == king_sq
+                && self.board.get(Coordinate::new_coordinate(7, rank))
+                    == (Square::Occupied {
+                        color,
+                        piece: PieceType::Rook,
+                    })
+                && between_empty
+                    .iter()
+                    .all(|&c| self.board.get(c) == Square::Empty)
+                && !self.is_attacked(Coordinate::new_coordinate(4, rank), color.opponent())
+                && !self.is_attacked(Coordinate::new_coordinate(5, rank), color.opponent())
+                && !self.is_attacked(Coordinate::new_coordinate(6, rank), color.opponent())
+            {
+                moves.push(Move::new_castle(
+                    from,
+                    Coordinate::new_coordinate(6, rank),
+                    CastleSide::Kingside,
+                ));
+            }
+        }
+
+        if self.can_castle_queenside(color) {
+            let king_sq = Coordinate::new_coordinate(4, rank);
+            let between_empty = [
+                Coordinate::new_coordinate(1, rank),
+                Coordinate::new_coordinate(2, rank),
+                Coordinate::new_coordinate(3, rank),
+            ];
+            if from == king_sq
+                && self.board.get(Coordinate::new_coordinate(0, rank))
+                    == (Square::Occupied {
+                        color,
+                        piece: PieceType::Rook,
+                    })
+                && between_empty
+                    .iter()
+                    .all(|&c| self.board.get(c) == Square::Empty)
+                && !self.is_attacked(Coordinate::new_coordinate(4, rank), color.opponent())
+                && !self.is_attacked(Coordinate::new_coordinate(3, rank), color.opponent())
+                && !self.is_attacked(Coordinate::new_coordinate(2, rank), color.opponent())
+            {
+                moves.push(Move::new_castle(
+                    from,
+                    Coordinate::new_coordinate(2, rank),
+                    CastleSide::Queenside,
+                ));
+            }
+        }
+    }
+
+    pub fn legal_moves(&mut self, move_gen_mode: MoveGenMode) -> Vec<Move> {
+        let us = self.turn;
+        let mut moves = Vec::with_capacity(64);
+
+        for i in 0..64 {
+            let from = Coordinate::from_idx(i);
+            let sq = self.board.get(from);
+            let piece = match sq {
+                Square::Occupied { color, piece } if color == us => piece,
+                _ => continue,
+            };
+
+            match piece {
+                PieceType::Pawn => self.pawn_moves(from, us, &mut moves),
+                PieceType::Knight => self.knight_moves(from, us, &mut moves),
+                PieceType::King => self.king_moves(from, us, &mut moves),
+                piece => self.sliding_moves(from, us, piece, &mut moves),
+            }
+        }
+
+        let mut legal_moves = Vec::with_capacity(64);
+
+        for m in moves {
+            if move_gen_mode == MoveGenMode::CaptureOnly && m.captured.is_none() {
+                continue;
+            }
+
+            if move_gen_mode == MoveGenMode::CapturesAndChecks
+                && (m.captured.is_none() && m.promotion.is_none() && !m.en_passant)
+            {
+                let undo = self.make_move(m);
+                if !self.in_check(us) && self.in_check(us.opponent()) {
+                    legal_moves.push(m);
+                }
+                self.unmake_move(undo);
+                continue;
+            }
+
+            let undo = self.make_move(m);
+            if !self.in_check(us) {
+                legal_moves.push(m);
+            }
+            self.unmake_move(undo);
+        }
+
+        legal_moves
+    }
+
+    fn apply_kingside_castle(&mut self, us: Color, rank: u8) {
+        match us {
+            Color::White => self.kings.0 = Coordinate::new_coordinate(6, 0),
+            Color::Black => self.kings.1 = Coordinate::new_coordinate(6, 7),
+        }
+        self.board
+            .set(Coordinate::new_coordinate(4, rank), Square::Empty);
+        self.board
+            .set(Coordinate::new_coordinate(7, rank), Square::Empty);
+        
+        self.board.set(
+            Coordinate::new_coordinate(6, rank),
+            Square::Occupied {
+                color: us,
+                piece: PieceType::King,
+            },
+        );
+        self.board.set(
+            Coordinate::new_coordinate(5, rank),
+            Square::Occupied {
+                color: us,
+                piece: PieceType::Rook,
+            },
+        );
+    }
+
+    fn apply_queenside_castle(&mut self, us: Color, rank: u8) {
+        match us {
+            Color::White => self.kings.0 = Coordinate::new_coordinate(2, 0),
+            Color::Black => self.kings.1 = Coordinate::new_coordinate(2, 7),
+        }
+        self.board
+            .set(Coordinate::new_coordinate(4, rank), Square::Empty);
+        self.board
+            .set(Coordinate::new_coordinate(0, rank), Square::Empty);
+        
+        self.board.set(
+            Coordinate::new_coordinate(2, rank),
+            Square::Occupied {
+                color: us,
+                piece: PieceType::King,
+            },
+        );
+        self.board.set(
+            Coordinate::new_coordinate(3, rank),
+            Square::Occupied {
+                color: us,
+                piece: PieceType::Rook,
+            },
+        );
+    }
+
+    pub fn make_move(&mut self, m: Move) -> Undo {
+        let undo = Undo {
+            castling_rights: self.castling_rights,
+            en_passant: self.en_passant,
+            halfmove_clock: self.halfmove_clock,
+            move_info: m,
+        };
+
+        let us = self.turn;
+        let them = us.opponent();
+        self.turn = them;
+
+        if us == Color::Black {
+            self.fullmove_number += 1;
+        }
+
+        self.en_passant = None;
+
+        if let Some(castle) = m.castle {
+            let rank = match us {
+                Color::White => 0,
+                Color::Black => 7,
+            };
+            match castle {
+                CastleSide::Kingside => self.apply_kingside_castle(us, rank),
+                CastleSide::Queenside => self.apply_queenside_castle(us, rank),
+            }
+
+            self.set_castle(us, false, false);
+            return undo;
+        }
+
+        let moving_piece = m.piece;
+        let is_pawn_move: bool = matches!(moving_piece, PieceType::Pawn);
+
+        let is_capture = match m.captured {
+            Some(piece) => {
+                let coord = if m.en_passant {
+                    Coordinate::new_coordinate(m.to.file(), m.from.rank())
+                } else {
+                    m.to
+                };
+
+                self.remove_material(piece, them, 1);
+
+                self.board.set(coord, Square::Empty);
+
+                let rank: u8 = match them {
+                    Color::White => 0,
+                    Color::Black => 7,
+                };
+                if m.to.file() == 0 && m.to.rank() == rank {
+                    match them {
+                        Color::White => self.castling_rights.queenside_white = false,
+                        Color::Black => self.castling_rights.queenside_black = false,
+                    }
+                }
+                if m.to.file() == 7 && m.to.rank() == rank {
+                    match them {
+                        Color::White => self.castling_rights.kingside_white = false,
+                        Color::Black => self.castling_rights.kingside_black = false,
+                    }
+                }
+
+                true
+            }
+            None => false,
+        };
+
+        if is_pawn_move {
+            let dir = m.to.rank() as i8 - m.from.rank() as i8;
+            if dir.abs() == 2 {
+                self.en_passant = Some(Coordinate::new_coordinate(
+                    m.from.file(),
+                    (m.from.rank() as i8 + dir.signum()) as u8,
+                ));
+            }
+        }
+
+        if moving_piece == PieceType::King {
+            self.set_castle(us, false, false);
+            match us {
+                Color::White => self.kings.0 = m.to,
+                Color::Black => self.kings.1 = m.to,
+            }
+        }
+
+        if moving_piece == PieceType::Rook {
+            let rank: u8 = match us {
+                Color::White => 0,
+                Color::Black => 7,
+            };
+            if m.from == Coordinate::new_coordinate(0, rank) {
+                match us {
+                    Color::White => self.castling_rights.queenside_white = false,
+                    Color::Black => self.castling_rights.queenside_black = false,
+                }
+            }
+            if m.from == Coordinate::new_coordinate(7, rank) {
+                match us {
+                    Color::White => self.castling_rights.kingside_white = false,
+                    Color::Black => self.castling_rights.kingside_black = false,
+                }
+            }
+        }
+
+        self.board.set(m.to, self.board.get(m.from));
+        self.board.set(m.from, Square::Empty);
+
+        if let Some(promo) = m.promotion {
+            self.board.set(
+                m.to,
+                Square::Occupied {
+                    color: us,
+                    piece: promo,
+                },
+            );
+            
+            self.add_material(promo, us, 1);
+            self.remove_material(moving_piece, us, 1);
+        }
+
+        if is_pawn_move || is_capture {
+            self.halfmove_clock = 0;
+        } else {
+            self.halfmove_clock += 1;
+        }
+
+        undo
+    }
+
+    fn unapply_kingside_castle(&mut self, us: Color, rank: u8) {
+        match us {
+            Color::White => self.kings.0 = Coordinate::new_coordinate(4, 0),
+            Color::Black => self.kings.1 = Coordinate::new_coordinate(4, 7),
+        }
+        self.board
+            .set(Coordinate::new_coordinate(6, rank), Square::Empty);
+        self.board
+            .set(Coordinate::new_coordinate(5, rank), Square::Empty);
+        self.board.set(
+            Coordinate::new_coordinate(4, rank),
+            Square::Occupied {
+                color: us,
+                piece: PieceType::King,
+            },
+        );
+        self.board.set(
+            Coordinate::new_coordinate(7, rank),
+            Square::Occupied {
+                color: us,
+                piece: PieceType::Rook,
+            },
+        );
+    }
+
+    fn unapply_queenside_castle(&mut self, us: Color, rank: u8) {
+        match us {
+            Color::White => self.kings.0 = Coordinate::new_coordinate(4, 0),
+            Color::Black => self.kings.1 = Coordinate::new_coordinate(4, 7),
+        }
+        self.board
+            .set(Coordinate::new_coordinate(2, rank), Square::Empty);
+        self.board
+            .set(Coordinate::new_coordinate(3, rank), Square::Empty);
+        self.board.set(
+            Coordinate::new_coordinate(4, rank),
+            Square::Occupied {
+                color: us,
+                piece: PieceType::King,
+            },
+        );
+        self.board.set(
+            Coordinate::new_coordinate(0, rank),
+            Square::Occupied {
+                color: us,
+                piece: PieceType::Rook,
+            },
+        );
+    }
+
+    pub fn unmake_move(&mut self, undo: Undo) {
+        let them = self.turn;
+        let us = them.opponent();
+        self.turn = us;
+
+        if us == Color::Black {
+            self.fullmove_number -= 1;
+        }
+
+        self.castling_rights = undo.castling_rights;
+        self.en_passant = undo.en_passant;
+        self.halfmove_clock = undo.halfmove_clock;
+
+        let m = undo.move_info;
+
+        if let Some(castle) = m.castle {
+            let rank = match us {
+                Color::White => 0,
+                Color::Black => 7,
+            };
+            match castle {
+                CastleSide::Kingside => self.unapply_kingside_castle(us, rank),
+                CastleSide::Queenside => self.unapply_queenside_castle(us, rank),
+            }
+            return;
+        };
+
+        let moving_piece = m.piece;
+        let sq = self.board.get(m.to);
+
+        let sq = match sq {
+            Square::Occupied { color, piece } if piece == moving_piece && color == self.turn => {
+                (color, piece)
+            }
+            Square::Occupied { color, piece }
+                if Some(piece) == m.promotion && color == self.turn =>
+            {
+                self.remove_material(piece, color, 1);
+                self.add_material(moving_piece, color, 1);
+                (color, PieceType::Pawn)
+            }
+            other => unreachable!(
+                "Invalid undo: expected {moving_piece:?} on {} but found {other:?}",
+                m.to.to_algebraic()
+            ),
+        };
+
+        self.board.set(
+            m.from,
+            Square::Occupied {
+                color: sq.0,
+                piece: sq.1,
+            },
+        );
+        self.board.set(m.to, Square::Empty);
+
+        if sq.1 == PieceType::King {
+            match self.turn {
+                Color::White => self.kings.0 = m.from,
+                Color::Black => self.kings.1 = m.from,
+            }
+        }
+
+        if let Some(piece) = m.captured {
+            let coord = if m.en_passant {
+                Coordinate::new_coordinate(m.to.file(), m.from.rank())
+            } else {
+                m.to
+            };
+            self.board
+                .set(coord, Square::Occupied { color: them, piece });
+            self.add_material(piece, them, 1);
+        }
+    }
+
+    pub fn halfmove_clock(&self) -> u32 {
+        self.halfmove_clock
+    }
 }
+
