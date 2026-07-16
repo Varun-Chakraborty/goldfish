@@ -2,10 +2,7 @@ use std::num::ParseIntError;
 
 use crate::{
     board::{Board, BoardError},
-    types::{
-        CastleSide, CastlingRights, Color, ColorError, Coordinate, Move,
-        PieceType, Square,
-    },
+    types::{CastleSide, CastlingRights, Color, ColorError, Coordinate, Move, PieceType, Square},
 };
 use thiserror::Error;
 
@@ -609,7 +606,7 @@ impl GameState {
             .set(Coordinate::new_coordinate(4, rank), Square::Empty);
         self.board
             .set(Coordinate::new_coordinate(7, rank), Square::Empty);
-        
+
         self.board.set(
             Coordinate::new_coordinate(6, rank),
             Square::Occupied {
@@ -635,7 +632,7 @@ impl GameState {
             .set(Coordinate::new_coordinate(4, rank), Square::Empty);
         self.board
             .set(Coordinate::new_coordinate(0, rank), Square::Empty);
-        
+
         self.board.set(
             Coordinate::new_coordinate(2, rank),
             Square::Occupied {
@@ -769,7 +766,7 @@ impl GameState {
                     piece: promo,
                 },
             );
-            
+
             self.add_material(promo, us, 1);
             self.remove_material(moving_piece, us, 1);
         }
@@ -919,7 +916,8 @@ mod tests {
         game::GameState,
         notation::parse_algebraic,
         types::{
-            Color::{Black, White}, PieceType::{Bishop, Knight, Pawn, Queen, Rook}
+            Color::{Black, White},
+            PieceType::{Bishop, Knight, Pawn, Queen, Rook},
         },
     };
 

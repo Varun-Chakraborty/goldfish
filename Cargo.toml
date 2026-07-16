@@ -3,5 +3,10 @@ name = "goldfish"
 version = "0.1.0"
 edition = "2024"
 
+default-run = "goldfish"
+
 [dependencies]
 thiserror = "2.0.18"
+
+[profile.release]
+debug = true
