@@ -980,8 +980,7 @@ mod tests {
         game::GameState,
         notation::parse_algebraic,
         types::{
-            Color::{Black, White},
-            PieceType::{Bishop, Knight, Pawn, Queen, Rook},
+            Color::{Black, White}, PieceType::{Bishop, Knight, Pawn, Queen, Rook}
         },
     };
 

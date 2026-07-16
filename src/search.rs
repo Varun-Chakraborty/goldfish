@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     eval::eval,
-    game::{GameState, MoveGenMode},
+    game::{GameState, MoveGenMode, Undo},
     position::{DrawReason::*, Position, PositionStatus::*},
     transposition::{Bound, TTEntry, TranspositionTable},
     types::{Color, Move},
@@ -71,6 +71,7 @@ pub struct SearchCounters {
 pub struct SearchStats {
     pub search_counters: SearchCounters,
     pub branching_factor: f64,
+    pub growth_factor: f64,
     pub tt_hit_rate: f64,
     pub tt_exact_hit_rate: f64,
 }
@@ -189,6 +190,8 @@ fn negamax(
     ply: u32,
     mut alpha: i32,
     mut beta: i32,
+    best_line: Option<&[Move]>,
+    pvpath: bool,
     search_context: &mut SearchContext,
 ) -> SearchResult {
     let org_alpha = alpha;
@@ -293,6 +296,15 @@ fn negamax(
         legal.insert(0, m);
     }
 
+    if pvpath
+        && let Some(best_line) = best_line
+        && let Some(bm) = best_line.get(ply as usize)
+        && let Some(index) = legal.iter().position(|m| *m == *bm)
+    {
+        let m = legal.remove(index);
+        legal.insert(0, m);
+    }
+
     for m in legal {
         if search_context.should_stop() {
             search_context.stopped = true;
@@ -301,7 +313,6 @@ fn negamax(
                 best_move: search_result.best_move,
             };
         }
-
         let undo = gs.make_move(m);
         let mut result = negamax(
             gs,
@@ -309,6 +320,11 @@ fn negamax(
             ply + 1,
             -beta,
             -alpha,
+            best_line,
+            pvpath
+                && best_line
+                    .and_then(|pv| pv.get(ply as usize))
+                    .is_some_and(|bm| *bm == m),
             search_context,
         );
         gs.unmake_move(undo);
@@ -365,7 +381,7 @@ pub struct EngineLimits {
     pub depth: Option<u32>,
 }
 
-pub fn search<F>(
+pub fn iterative_deepening<F>(
     gs: &mut GameState,
     limits: EngineLimits,
     stop: &Arc<AtomicBool>,
@@ -375,39 +391,95 @@ pub fn search<F>(
     F: FnMut(EngineEvent),
 {
     let depth = limits.depth.unwrap_or(256);
+    let mut best_line: Option<Vec<Move>> = None;
+    
     let tt = tt.get_or_insert_with(|| TranspositionTable::new_table(64, MATE_THRESHOLD));
+    
+    let mut nodes_in_last_iteration = 1;
 
-    let mut search_context = SearchContext {
-        stopped: false,
-        stop,
-        tt,
-        search_stats: SearchStats::new(),
-    };
+    for depth in 1..=depth {
+        let mut search_context = SearchContext {
+            stopped: false,
+            stop,
+            tt,
+            search_stats: SearchStats::new(),
+        };
+        let time = Instant::now();
+        let result = negamax(
+            gs,
+            depth,
+            0,
+            -MATE,
+            MATE,
+            best_line.as_deref(),
+            true,
+            &mut search_context,
+        );
 
-    let start_time = Instant::now();
+        if search_context.stopped || stop.load(Ordering::Relaxed) {
+            if let Some(best_line) = best_line {
+                callback(EngineEvent::SearchStopped(best_line[0]));
+            }
+            return;
+        }
 
-    let result = negamax(gs, depth, 0, -MATE, MATE, &mut search_context);
+        if let Some(best_line) = best_line.as_mut() {
+            best_line.clear();
+        }
 
-    let duration = start_time.elapsed();
+        if let Some(m) = result.best_move {
+            best_line.get_or_insert_default().push(m);
 
-    callback(EngineEvent::IterationInfo(IterationInfo {
-        depth,
-        seldepth: depth,
-        score: score(result.score, MATE_THRESHOLD),
-        raw_score: result.score,
-        nodes: search_context.search_stats.search_counters.nodes,
-        nps: (search_context.search_stats.search_counters.nodes as f64 / duration.as_secs_f64())
+            let mut undo_stack: Vec<Undo> = Vec::with_capacity(depth as usize);
+            let undo = gs.make_move(m);
+            undo_stack.push(undo);
+
+            let mut ply = 1;
+            while ply < depth
+                && let Some(entry) = search_context.tt.probe(gs.zobrist, 0, None)
+                && let Some(bm) = entry.best_move
+            {
+                let undo = gs.make_move(bm);
+                undo_stack.push(undo);
+                best_line.get_or_insert_default().push(bm);
+
+                ply += 1;
+            }
+
+            while let Some(undo) = undo_stack.pop() {
+                gs.unmake_move(undo);
+            }
+        }
+
+        let duration = time.elapsed();
+        
+        callback(EngineEvent::IterationInfo(IterationInfo {
+            depth,
+            seldepth: depth,
+            score: score(result.score, MATE_THRESHOLD),
+            raw_score: result.score,
+            nodes: search_context.search_stats.search_counters.nodes,
+            nps: ((search_context.search_stats.search_counters.nodes + search_context.search_stats.search_counters.qnodes) as f64
+                / duration.as_secs_f64())
             .ceil() as u64,
-        best_line: result.best_move.map(|m| vec![m]),
-        search_stats: Some(SearchStats {
-            tt_hit_rate: search_context.tt.hit_rate(),
-            tt_exact_hit_rate: search_context.tt.exact_hit_rate(),
-            branching_factor: (search_context.search_stats.search_counters.nodes as f64)
-                .powf(1f64 / depth as f64),
-            search_counters: search_context.search_stats.search_counters,
-        }),
-    }));
-    callback(EngineEvent::SearchFinished(result.best_move.unwrap()));
+            best_line: best_line.clone(),
+            search_stats: Some(SearchStats {
+                tt_hit_rate: search_context.tt.hit_rate(),
+                tt_exact_hit_rate: search_context.tt.exact_hit_rate(),
+                branching_factor: (search_context.search_stats.search_counters.nodes as f64)
+                    .powf(1f64 / depth as f64),
+                growth_factor: search_context.search_stats.search_counters.nodes as f64
+                / nodes_in_last_iteration as f64,
+                search_counters: search_context.search_stats.search_counters,
+            }),
+        }));
+        
+        nodes_in_last_iteration = search_context.search_stats.search_counters.nodes;
+    }
+
+    if let Some(best_line) = best_line {
+        callback(EngineEvent::SearchFinished(best_line[0]));
+    }
 }
 
 fn score(score: i32, mate_threshold: i32) -> Score {

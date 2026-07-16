@@ -12,7 +12,11 @@ mod zobrist;
 use std::sync::{Arc, atomic::AtomicBool, mpsc};
 use thiserror::Error;
 
-use crate::{game::GameStateError, notation::parse_algebraic, search::search};
+use crate::{
+    game::GameStateError,
+    notation::parse_algebraic,
+    search::iterative_deepening,
+};
 
 pub use crate::{
     game::GameState,
@@ -108,7 +112,7 @@ enum GoldFishError {
 
 struct GoldFish {
     gamestate: Option<GameState>,
-    tt: Option<transposition::TranspositionTable>
+    tt: Option<transposition::TranspositionTable>,
 }
 
 impl GoldFish {
@@ -131,7 +135,7 @@ impl GoldFish {
         F: FnMut(EngineEvent),
     {
         match &mut self.gamestate {
-            Some(gs) => search(gs, limits, stop, &mut self.tt, callback),
+            Some(gs) => iterative_deepening(gs, limits, stop, &mut self.tt, callback),
             None => return Err(GoldFishError::GameStateNotInitialised),
         };
         Ok(())
