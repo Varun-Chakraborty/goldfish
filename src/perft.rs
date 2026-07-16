@@ -1,18 +1,26 @@
 use crate::{
     GameState,
     notation::fmt_pgn_moves,
-    game::MoveGenMode,
+    position::{Position, PositionStatus},
     zobrist::compute_hash,
 };
 
 #[allow(dead_code)]
 pub fn perft(gs: &mut GameState, depth: u32) -> u64 {
+    let position = Position::analyse(gs);
+
+    match position.status {
+        PositionStatus::Checkmate => println!("Checkmate found!"),
+        PositionStatus::Draw(_) => println!("Draw found!"),
+        PositionStatus::Ongoing => (),
+    }
+
     if depth == 0 {
         return 1;
     }
     let mut count = 0;
 
-    let legal = gs.legal_moves(MoveGenMode::All);
+    let legal = position.legal_moves.expect("No legal moves");
 
     for m in legal {
         let undo = gs.make_move(m);
@@ -25,12 +33,22 @@ pub fn perft(gs: &mut GameState, depth: u32) -> u64 {
 
 #[allow(dead_code)]
 pub fn divide(gs: &mut GameState, depth: u32) {
+    let position = Position::analyse(gs);
+
+    match position.status {
+        PositionStatus::Ongoing => (),
+        _ => {
+            println!(": 0");
+            return;
+        }
+    }
+
     if depth == 0 {
         println!(": 0");
         return;
     }
 
-    let legal = gs.legal_moves(MoveGenMode::All);
+    let legal = position.legal_moves.expect("No legal moves");
 
     for m in legal {
         let san = &fmt_pgn_moves(gs, &[m])[0];

@@ -6,9 +6,16 @@ use std::{
     time::Instant,
 };
 
-use crate::{GameState, eval::eval, game::MoveGenMode, types::Move};
+use crate::{
+    eval::eval,
+    game::GameState,
+    position::{DrawReason::*, Position, PositionStatus::*},
+    types::Move,
+};
+
 const MATE: i32 = 32000;
 const MATE_THRESHOLD: i32 = 31744;
+const DRAW: i32 = 0;
 
 struct SearchContext<'a> {
     stopped: bool,
@@ -85,12 +92,39 @@ fn negamax(
         };
     }
 
+    let position = Position::analyse(gs);
+    match position.status {
+        Checkmate => {
+            let search_result = SearchResult {
+                score: -MATE + ply as i32,
+                best_move: None,
+            };
+            
+            return search_result;
+        }
+        Draw(Stalemate) | Draw(InsufficientMaterial) => {
+            let search_result = SearchResult {
+                score: DRAW,
+                best_move: None,
+            };
+            
+            return search_result;
+        }
+        Draw(FiftyMoveRule) | Draw(ThreefoldRepetition) => {
+            return SearchResult {
+                score: DRAW,
+                best_move: None,
+            };
+        }
+        Ongoing => {}
+    }
+
     let mut search_result = SearchResult {
         score: -MATE,
         best_move: None,
     };
 
-    let mut legal = gs.legal_moves(MoveGenMode::All);
+    let mut legal = position.legal_moves.expect("No legal moves");
     let total_moves = legal.len();
 
     legal.sort_by_key(|m| m.captured.is_none());

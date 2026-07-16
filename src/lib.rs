@@ -3,6 +3,7 @@ mod eval;
 mod game;
 mod notation;
 mod perft;
+mod position;
 mod search;
 mod types;
 mod zobrist;
