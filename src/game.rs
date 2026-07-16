@@ -913,3 +913,242 @@ impl GameState {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use crate::{
+        game::GameState,
+        notation::parse_algebraic,
+        types::{
+            Color::{Black, White}, PieceType::{Bishop, Knight, Pawn, Queen, Rook}
+        },
+    };
+
+    #[test]
+    fn test_fen() {
+        let mut gs =
+            GameState::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
+                .unwrap();
+        assert_eq!(
+            gs.to_fen(),
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+        );
+        let m = parse_algebraic(&mut gs, "e4").unwrap();
+        gs.make_move(m);
+        assert_eq!(
+            gs.to_fen(),
+            "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
+        );
+    }
+
+    #[test]
+    fn test_from_fen() {
+        let gs = GameState::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
+            .unwrap();
+        assert_eq!(
+            gs.to_fen(),
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+        );
+    }
+
+    #[test]
+    fn test_unmake_move_kingside_castle() {
+        let mut gs =
+            GameState::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQK2R w KQkq - 0 1").unwrap();
+        let m = parse_algebraic(&mut gs, "o-o").unwrap();
+        let material_count = gs.material_count;
+        let undo = gs.make_move(m);
+        assert_eq!(
+            gs.to_fen(),
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQ1RK1 b kq - 0 1"
+        );
+        gs.unmake_move(undo);
+        assert_eq!(
+            gs.to_fen(),
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQK2R w KQkq - 0 1"
+        );
+        assert_eq!(gs.material_count, material_count);
+    }
+
+    #[test]
+    fn test_unmake_move_queenside_castle() {
+        let mut gs =
+            GameState::from_fen("r3kbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1").unwrap();
+        let m = parse_algebraic(&mut gs, "o-o-o").unwrap();
+        let material_count = gs.material_count;
+        let undo = gs.make_move(m);
+        assert_eq!(
+            gs.to_fen(),
+            "2kr1bnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQ - 0 2"
+        );
+        gs.unmake_move(undo);
+        assert_eq!(
+            gs.to_fen(),
+            "r3kbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1"
+        );
+        assert_eq!(gs.material_count, material_count);
+    }
+
+    #[test]
+    fn test_unmake_move_rook_move_kingside() {
+        let mut gs =
+            GameState::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQK2R w KQkq - 0 1").unwrap();
+        let m = parse_algebraic(&mut gs, "Rg1").unwrap();
+        let material_count = gs.material_count;
+        let undo = gs.make_move(m);
+        assert_eq!(
+            gs.to_fen(),
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQK1R1 b Qkq - 1 1"
+        );
+        gs.unmake_move(undo);
+        assert_eq!(
+            gs.to_fen(),
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQK2R w KQkq - 0 1"
+        );
+        assert_eq!(gs.material_count, material_count);
+    }
+
+    #[test]
+    fn test_unmake_move_rook_move_queenside() {
+        let mut gs =
+            GameState::from_fen("r3kbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1").unwrap();
+        let m = parse_algebraic(&mut gs, "Rb8").unwrap();
+        let material_count = gs.material_count;
+        let undo = gs.make_move(m);
+        assert_eq!(
+            gs.to_fen(),
+            "1r2kbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQk - 1 2"
+        );
+        gs.unmake_move(undo);
+        assert_eq!(
+            gs.to_fen(),
+            "r3kbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1"
+        );
+        assert_eq!(gs.material_count, material_count);
+    }
+
+    #[test]
+    fn test_unmake_move_capture() {
+        let mut gs =
+            GameState::from_fen("rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1")
+                .unwrap();
+        let m = parse_algebraic(&mut gs, "exd5").unwrap();
+        let material_count = gs.material_count;
+        let undo = gs.make_move(m);
+        assert_eq!(
+            gs.to_fen(),
+            "rnbqkbnr/ppp1pppp/8/3P4/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
+        );
+        gs.unmake_move(undo);
+        assert_eq!(
+            gs.to_fen(),
+            "rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1"
+        );
+        assert_eq!(gs.material_count, material_count);
+    }
+
+    #[test]
+    fn test_unmake_move_promotion() {
+        let mut gs = GameState::from_fen("8/7P/8/8/8/8/8/K1k5 w - - 0 1").unwrap();
+        let m = parse_algebraic(&mut gs, "h8=Q").unwrap();
+        let material_count = gs.material_count;
+        let undo = gs.make_move(m);
+        assert_eq!(gs.to_fen(), "7Q/8/8/8/8/8/8/K1k5 b - - 0 1");
+        gs.unmake_move(undo);
+        assert_eq!(gs.to_fen(), "8/7P/8/8/8/8/8/K1k5 w - - 0 1");
+        assert_eq!(gs.material_count, material_count);
+    }
+
+    #[test]
+    fn test_unmake_move_promotion_capture() {
+        let mut gs = GameState::from_fen("6r1/7P/8/8/8/8/8/K1k5 w - - 0 1").unwrap();
+        let m = parse_algebraic(&mut gs, "hxg8=Q").unwrap();
+        let material_count = gs.material_count;
+        let undo = gs.make_move(m);
+        assert_eq!(gs.to_fen(), "6Q1/8/8/8/8/8/8/K1k5 b - - 0 1");
+        gs.unmake_move(undo);
+        assert_eq!(gs.to_fen(), "6r1/7P/8/8/8/8/8/K1k5 w - - 0 1");
+        assert_eq!(gs.material_count, material_count);
+    }
+
+    #[test]
+    fn test_unmake_move_enpassant() {
+        let mut gs =
+            GameState::from_fen("rnbqkbnr/ppp1pppp/8/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 1")
+                .unwrap();
+        let m = parse_algebraic(&mut gs, "exd6").unwrap();
+        let material_count = gs.material_count;
+        let undo = gs.make_move(m);
+        assert_eq!(
+            gs.to_fen(),
+            "rnbqkbnr/ppp1pppp/3P4/8/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
+        );
+        gs.unmake_move(undo);
+        assert_eq!(
+            gs.to_fen(),
+            "rnbqkbnr/ppp1pppp/8/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 1"
+        );
+        assert_eq!(gs.material_count, material_count);
+    }
+
+    #[test]
+    fn test_count_material_capture_promotion() {
+        let mut gs = GameState::from_fen("7r/6P1/8/8/8/8/8/k1K5 w KQkq - 0 1").unwrap();
+        let m = parse_algebraic(&mut gs, "gxh8=Q+").unwrap();
+        let undo = gs.make_move(m);
+        let material_count = gs.material_count;
+        assert_eq!(material_count[gs.material_idx(Queen, White)], 1);
+        assert_eq!(material_count[gs.material_idx(Queen, Black)], 0);
+        assert_eq!(material_count[gs.material_idx(Rook, White)], 0);
+        assert_eq!(material_count[gs.material_idx(Rook, Black)], 0);
+        assert_eq!(material_count[gs.material_idx(Bishop, White)], 0);
+        assert_eq!(material_count[gs.material_idx(Bishop, Black)], 0);
+        assert_eq!(material_count[gs.material_idx(Knight, White)], 0);
+        assert_eq!(material_count[gs.material_idx(Knight, Black)], 0);
+        assert_eq!(material_count[gs.material_idx(Pawn, Black)], 0);
+        assert_eq!(material_count[gs.material_idx(Pawn, White)], 0);
+        gs.unmake_move(undo);
+
+        let material_count = gs.material_count;
+        assert_eq!(material_count[gs.material_idx(Queen, White)], 0);
+        assert_eq!(material_count[gs.material_idx(Queen, Black)], 0);
+        assert_eq!(material_count[gs.material_idx(Rook, White)], 0);
+        assert_eq!(material_count[gs.material_idx(Rook, Black)], 1);
+        assert_eq!(material_count[gs.material_idx(Bishop, White)], 0);
+        assert_eq!(material_count[gs.material_idx(Bishop, Black)], 0);
+        assert_eq!(material_count[gs.material_idx(Knight, White)], 0);
+        assert_eq!(material_count[gs.material_idx(Knight, Black)], 0);
+        assert_eq!(material_count[gs.material_idx(Pawn, White)], 1);
+        assert_eq!(material_count[gs.material_idx(Pawn, Black)], 0);
+    }
+
+    #[test]
+    fn test_count_material_en_passant() {
+        let mut gs = GameState::from_fen("8/8/8/3pP3/8/8/8/k1K5 w KQkq d6 0 1").unwrap();
+        let m = parse_algebraic(&mut gs, "exd6").unwrap();
+        let undo = gs.make_move(m);
+        let material_count = gs.material_count;
+        assert_eq!(material_count[gs.material_idx(Queen, White)], 0);
+        assert_eq!(material_count[gs.material_idx(Queen, Black)], 0);
+        assert_eq!(material_count[gs.material_idx(Rook, White)], 0);
+        assert_eq!(material_count[gs.material_idx(Rook, Black)], 0);
+        assert_eq!(material_count[gs.material_idx(Bishop, White)], 0);
+        assert_eq!(material_count[gs.material_idx(Bishop, Black)], 0);
+        assert_eq!(material_count[gs.material_idx(Knight, White)], 0);
+        assert_eq!(material_count[gs.material_idx(Knight, Black)], 0);
+        assert_eq!(material_count[gs.material_idx(Pawn, Black)], 0);
+        assert_eq!(material_count[gs.material_idx(Pawn, White)], 1);
+        gs.unmake_move(undo);
+
+        let material_count = gs.material_count;
+        assert_eq!(material_count[gs.material_idx(Queen, White)], 0);
+        assert_eq!(material_count[gs.material_idx(Queen, Black)], 0);
+        assert_eq!(material_count[gs.material_idx(Rook, White)], 0);
+        assert_eq!(material_count[gs.material_idx(Rook, Black)], 0);
+        assert_eq!(material_count[gs.material_idx(Bishop, White)], 0);
+        assert_eq!(material_count[gs.material_idx(Bishop, Black)], 0);
+        assert_eq!(material_count[gs.material_idx(Knight, White)], 0);
+        assert_eq!(material_count[gs.material_idx(Knight, Black)], 0);
+        assert_eq!(material_count[gs.material_idx(Pawn, White)], 1);
+        assert_eq!(material_count[gs.material_idx(Pawn, Black)], 1);
+    }
+}
